@@ -16,7 +16,7 @@ Quickstart without an org:
 
 Quickstart with an org (not yet executed by the authors):
 1. Read kits/service-triage/README.md for prerequisites and the v1 contract.
-2. Run DEV_HUB=my-hub sh scripts/setup-service-triage.sh to create a scratch org, deploy, assign the permission set, and run Apex tests.
+2. Run DEV_HUB=my-hub sh scripts/setup-service-triage.sh to create a scratch org, deploy dependencies, validate and publish the candidate agent version, assign the permission set, and run Apex tests against installed code.
 3. Complete the manual agent activation checklist in the kit README, then preview a conversation.
 
 Verification summary: offline harness green is proven in CI. Apex execution, deployment, and agent evaluation are pending a first org run. See docs/TESTING.md for what each check proves and docs/EVIDENCE.md for the current record.

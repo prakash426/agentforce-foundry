@@ -13,9 +13,9 @@ Support requests arrive as free text. Someone must decide urgency and the right 
 
 ## Behavior map
 1. triage_router welcomes and sends the request to one subagent.
-2. triage_case stores the text, runs triage_service_case once, then follows the outcome code: present suggestions with the word suggested, ask one targeted question on NEEDS_CLARIFICATION, offer the human path on NEEDS_REVIEW.
-3. missing_info and ambiguous_request ask for what is missing without guessing.
-4. escalation hands to a human on request.
+2. triage_case overwrites subject and details fresh for each request, runs triage_service_case once, then follows the outcome code: present suggestions with the word suggested, ask one targeted question on NEEDS_CLARIFICATION, recommend human follow up on NEEDS_REVIEW. It transitions to escalation on explicit human requests and to off-topic handling for non support chat. Negation and uncertainty in user text are preserved into the action inputs.
+3. missing_info and ambiguous_request ask for what is missing without guessing, then transition back to triage_case for scoring.
+4. escalation recommends human follow up with the suggestion as context. V1 never transfers to a human; there is no Omni-Channel connection and no transfer tool.
 5. off_topic redirects non support chat and reveals nothing about the system.
 
 ## Prerequisites
@@ -25,15 +25,20 @@ Support requests arrive as free text. Someone must decide urgency and the right 
 4. No paid addons. v1 uses no external APIs.
 
 ## Setup (automated)
-1. Run DEV_HUB=my-hub sh scripts/setup-service-triage.sh with your Dev Hub alias. It creates a scratch org, deploys the Service classes plus permission set plus agent bundle, assigns the permission set, and runs the Service Apex tests.
-2. Org creation is the one non idempotent step: it fails if the alias exists. Delete the old org or export a new ORG_ALIAS and rerun.
+1. Run DEV_HUB=my-hub sh scripts/setup-service-triage.sh with your Dev Hub alias. It creates a scratch org, deploys Apex plus permission sets, validates the authoring bundle, publishes a candidate agent version (inactive), assigns the permission set, and runs the Service Apex tests against installed code.
+2. To reuse an existing eligible dev org instead of creating a scratch org, run USE_EXISTING_ORG=1 ORG_ALIAS=my-dev-org sh scripts/setup-service-triage.sh. The org must be Agentforce enabled.
+3. Org creation is the one non idempotent step: it fails if the alias exists. Delete the old org or export a new ORG_ALIAS and rerun.
+4. Deploying metadata alone never creates a published executable agent version. Only sf agent publish creates the candidate version, and only sf agent activate makes a version live.
+
+## Agent user placeholder
+The committed .agent file holds an UPDATE_WITH_DEFAULT_AGENT_USER placeholder. Resolve it at publish time by exporting AGENT_USER with the agent runtime username, for example AGENT_USER=agent.user@example.com DEV_HUB=my-hub sh scripts/setup-service-triage.sh. The script swaps it for publish only and restores the placeholder so no org specific value is committed. Without AGENT_USER the script warns and publish may fail; set the default agent user in Agentforce Studio afterward instead. Never commit a real username.
 
 ## Setup (manual, pending first run)
-1. Open Service_Triage_Agent in Agentforce Studio and set a default agent user (the committed file holds an UPDATE_WITH_DEFAULT_AGENT_USER placeholder).
+1. Confirm the default agent user on Service_Triage_Agent in Agentforce Studio (or via AGENT_USER at publish time).
 2. Assign the Foundry Service permission set to that agent user.
-3. Activate the agent.
+3. Activate a published agent version. Publishing leaves the version inactive by design.
 4. Preview one conversation in live mode using the fixture inputs in tests/fixtures/service-triage-inputs.json.
-5. Generate a test spec with sf agent generate test-spec, create it with sf agent test create, and run it with sf agent test run. Record the junit or json results.
+5. Convert the committed scenarios with python3 tests/eval/convert_service_scenarios.py, create the test with sf agent test create, and run it with sf agent test run. Record the json results plus the candidate commit and agent version.
 
 ## Example conversations (illustrative until executed)
 User: Checkout is down everywhere, registers frozen since 9am.
@@ -46,21 +51,23 @@ User: Help.
 Agent: I can triage this once I know more. What is the issue, and who or what is affected.
 
 ## Verification
-1. Offline: run the three python3 commands in docs/TESTING.md. All must pass with exit zero.
-2. Org: rerun the Apex tests and confirm coverage, then run the agent test and keep the results file.
-3. Truthfulness: confirm the agent says suggested and never routed, assigned, saved, or escalated in v1.
+1. Offline: run the python3 commands in docs/TESTING.md. All must pass with exit zero.
+2. Org: rerun the Apex tests against installed code and confirm coverage, then run the agent test from converted scenarios and keep the results file with commit and version.
+3. Truthfulness: confirm the agent says suggested and recommend human follow up where needed. It never says routed, assigned, saved, transferred, handed off, or escalated as a completed action in v1.
 
 ## Limitations
 1. No agent run has happened yet. Conversations above are illustrative.
 2. No record writes exist in v1. Human follow through is required.
-3. Queue labels are not org validated.
-4. English only in v1.
+3. V1 never transfers to a human. Escalation means a written recommendation, not a handoff. Real transfer would need an Omni-Channel messaging connection plus assets, which v1 does not ship.
+4. Queue labels are not org validated.
+5. English only in v1.
 
 ## Troubleshooting
 1. Scratch create fails on alias: delete the old org or use a fresh ORG_ALIAS.
-2. Deploy fails on the agent bundle: confirm the scratch definition includes the agent platform settings from config/project-scratch-def.json.
-3. Apex tests fail: run the single class with junit output and read the first failing assertion.
-4. Agent preview shows no action: confirm the permission set assignment plus agent activation, then retry.
+2. Validation or publish fails on the agent bundle: confirm the scratch definition includes the agent platform settings from config/project-scratch-def.json, then read the compiler error location in the json output.
+3. Publish fails on the agent user: rerun with AGENT_USER set to a real username, or set the default agent user in Studio.
+4. Apex tests fail: run the single class with junit output and read the first failing assertion.
+5. Agent preview shows no action: confirm the permission set assignment plus agent activation, then retry.
 
 ## Cleanup
 Delete the scratch org when finished so the trial allocation is released.

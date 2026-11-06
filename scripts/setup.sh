@@ -15,4 +15,6 @@ sf project deploy start -o "$ALIAS" -w 10
 
 echo "Step 3 of 3: run local Apex tests"
 sf apex run test -o "$ALIAS" -l RunLocalTests -r human -w 10
+echo "Note: this deploys metadata only. It does not validate, publish, or activate any agent version."
+echo "Use scripts/setup-service-triage.sh for the supported agent lifecycle."
 echo "Done. Org alias: $ALIAS"

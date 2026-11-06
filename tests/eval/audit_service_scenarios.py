@@ -61,6 +61,17 @@ def audit(root):
     record("live-targets", False, "catalog lacks live_targets block")
   else:
     record("live-targets", True, "live targets recorded as targets, not results")
+  flows = [c.get("id") for c in scenarios if isinstance(c.get("turns"), list)]
+  if len(flows) < 5:
+    record("multiturn-coverage", False, "need 5 or more multi-turn flow scenarios, found %d" % len(flows))
+  else:
+    record("multiturn-coverage", True, "%d multi-turn flow scenarios ready for conversion" % len(flows))
+  bad_expect = sorted({str(c.get("agent_expect")) for c in scenarios
+                       if c.get("agent_expect") not in ("run_triage", "clarify", "redirect", "escalate")})
+  if bad_expect:
+    record("agent-expect-values", False, "unknown agent_expect values: " + ", ".join(bad_expect))
+  else:
+    record("agent-expect-values", True, "every scenario uses a supported agent_expect value")
 
   fixture_path = root / "tests" / "fixtures" / "service-triage-inputs.json"
   try:

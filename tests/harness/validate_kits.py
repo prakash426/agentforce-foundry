@@ -19,6 +19,8 @@ SERVICE_SUITE_KEYS = {"catalog", "version", "scenarios", "static_thresholds"}
 SCENARIO_KEYS = {"id", "category", "input", "apex_outcome", "agent_expect"}
 CATEGORIES = {"normal", "ambiguous", "adversarial", "out_of_scope", "escalation"}
 OUTCOMES = {"SUGGESTED", "NEEDS_CLARIFICATION", "NEEDS_REVIEW"}
+AGENT_EXPECTS = {"run_triage", "clarify", "redirect", "escalate"}
+TURN_ROLES = {"user", "agent"}
 APEX_MARKERS = {
   "force-app/main/default/classes/ServiceTriageAction.cls": ["@InvocableMethod", "OUTCOME_SUGGESTED"],
   "force-app/main/default/classes/ServiceTriageActionTest.cls": ["@IsTest", "System.assertEquals"],
@@ -68,9 +70,39 @@ def check_service_catalog(root):
       problems.append("scenario %s has unknown apex_outcome" % case["id"])
     if case["apex_outcome"] == "SUGGESTED" and not (case.get("apex_priority") and case.get("apex_queue")):
       problems.append("scenario %s SUGGESTED without priority and queue" % case["id"])
+    if case["apex_outcome"] in ("NEEDS_CLARIFICATION", "NEEDS_REVIEW"):
+      if case.get("apex_priority") or case.get("apex_queue"):
+        problems.append("scenario %s %s must not set priority or queue" % (case["id"], case["apex_outcome"]))
+    if case.get("agent_expect") not in AGENT_EXPECTS:
+      problems.append("scenario %s has unknown agent_expect" % case["id"])
+    turns = case.get("turns")
+    if turns is not None:
+      problems.extend(check_turns(case["id"], turns, case.get("input")))
   if problems:
     return ("service-catalog", False, "; ".join(problems))
   return ("service-catalog", True, "%d scenarios valid" % len(scenarios))
+
+
+def check_turns(sid, turns, top_input):
+  problems = []
+  if not isinstance(turns, list) or not turns:
+    return ["scenario %s turns must be a nonempty list" % sid]
+  for idx, turn in enumerate(turns):
+    if not isinstance(turn, dict):
+      problems.append("scenario %s turn %d is not an object" % (sid, idx))
+      continue
+    if turn.get("role") not in TURN_ROLES:
+      problems.append("scenario %s turn %d has unknown role" % (sid, idx))
+    if not str(turn.get("message", "")).strip():
+      problems.append("scenario %s turn %d has blank message" % (sid, idx))
+    if "agent_expect" in turn and turn["agent_expect"] not in AGENT_EXPECTS:
+      problems.append("scenario %s turn %d has unknown agent_expect" % (sid, idx))
+  users = [t for t in turns if isinstance(t, dict) and t.get("role") == "user"]
+  if not users:
+    problems.append("scenario %s turns have no user turn" % sid)
+  elif str(users[-1].get("message", "")).strip() != str(top_input or "").strip():
+    problems.append("scenario %s final user turn must equal input" % sid)
+  return problems
 
 
 def check_legacy_suites(root):
@@ -126,9 +158,20 @@ def check_agent_bundle(root):
   for marker in ("apex://ServiceTriageAction", "triage_service_case", "default_agent_user"):
     if marker not in text:
       return ("agent-bundle", False, "agent script lacks marker " + marker)
+  for marker in ("back_to_triage", "go_to_escalation", "go_to_off_topic",
+                 "@utils.transition to @subagent.triage_case",
+                 "@utils.transition to @subagent.escalation",
+                 "@utils.transition to @subagent.off_topic"):
+    if marker not in text:
+      return ("agent-bundle", False, "agent script lacks transition marker " + marker)
+  if "@utils.escalate" in text:
+    return ("agent-bundle", False, "agent script uses unsupported @utils.escalate without a messaging connection")
+  for ref in ("{!@actions.back_to_triage}", "{!@actions.go_to_escalation}", "{!@actions.go_to_off_topic}"):
+    if ref not in text:
+      return ("agent-bundle", False, "agent script never references transition " + ref)
   if "AGENT" not in meta.read_text():
     return ("agent-bundle", False, "bundle meta does not declare AGENT type")
-  return ("agent-bundle", True, "agent script and bundle meta present with action binding")
+  return ("agent-bundle", True, "agent script and bundle meta present with action binding and transitions")
 
 
 def run(root=None):

@@ -7,10 +7,11 @@ A support team adopting Agentforce needs a triage starter they can read end to e
 Service Triage is recommendation only in v1. The agent collects request text, calls one invocable Apex action, and presents a suggested priority and queue with a reason. Nothing is created, updated, assigned, or routed in v1. Suggestions are labels, not completed operations.
 
 Conversation → triage_router → triage_case → ServiceTriageAction → suggestion plus reason
-Conversation → triage_router → missing_info → one clarifying question
-Conversation → triage_router → ambiguous_request → one clarifying question
-Conversation → triage_router → escalation → human handoff
-Conversation → triage_router → off_topic → polite redirect
+Conversation → triage_router → missing_info → one clarifying question → back to triage_case
+Conversation → triage_router → ambiguous_request → one clarifying question → back to triage_case
+Conversation → triage_case → escalation → human follow up recommendation (no transfer in v1)
+Conversation → triage_case → off_topic → polite redirect
+Conversation → triage_router → escalation or off_topic directly for explicit human requests and non support chat
 
 ## Components
 1. Service_Triage_Agent.agent: Agent Script blueprint modeled on the official Local Info Agent sample. Holds system rules, router, five subagents, and the action binding to apex://ServiceTriageAction with input and output mappings.
@@ -21,7 +22,10 @@ Conversation → triage_router → off_topic → polite redirect
 6. Deploy path: scratch definition modeled on the official agent template, setup scripts, and CI workflows.
 
 ## Why no Flow
-v1 takes no record actions and needs no branching or orchestration beyond one Apex call, so a Flow would be decorative. Escalation and clarification are conversational behaviors owned by the agent script. If a later version writes records or branches across objects, a Flow action becomes the right tool and will be added with tests.
+v1 takes no record actions and needs no branching or orchestration beyond one Apex call, so a Flow would be decorative. Human follow up recommendations and clarification are conversational behaviors owned by the agent script. If a later version writes records or branches across objects, a Flow action becomes the right tool and will be added with tests.
+
+## Agent lifecycle
+Deploying metadata alone never creates a published executable agent version. The supported sequence is: deploy Apex plus permission sets, run sf agent validate authoring-bundle as a compile check, run sf agent publish authoring-bundle to create an inactive candidate version (Bot plus BotVersion plus GenAi metadata retrieved back to the project), then run sf agent activate for one version when ready. Tests and preview run against the activated published agent, never against the draft bundle. The committed .agent file keeps an agent user placeholder that is resolved at publish time only and never committed with a real value.
 
 ## Security posture
 Customer text is treated as data. The agent script carries explicit disregard override rules. The Apex action has no tools to abuse: override style phrases beside a severity signal force NEEDS_REVIEW, and alone they are inert. No credentials are committed. CI authentication uses a protected secret that never runs for fork pull requests.
