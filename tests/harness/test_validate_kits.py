@@ -28,5 +28,13 @@ class ValidatorTest(unittest.TestCase):
     self.assertTrue(sq["readme"])
     self.assertTrue(sq["suite"])
 
+  def test_internal_kit_present(self):
+    out = v.run()
+    self.assertTrue(out["apex"]["it_action"])
+    self.assertTrue(out["apex"]["it_test"])
+    it = [k for k in out["kits"] if k["kit"] == "internal-help"][0]
+    self.assertTrue(it["readme"])
+    self.assertTrue(it["suite"])
+
 if __name__ == "__main__":
   unittest.main()
