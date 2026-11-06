@@ -12,5 +12,13 @@ jobs:
           python-version: "3.11"
       - name: run offline validator
         run: python3 tests/harness/validate_kits.py
-      - name: run harness tests
+      - name: run harness unit checks
         run: python3 tests/harness/test_validate_kits.py
+      - name: run scenario audit
+        run: python3 tests/eval/audit_service_scenarios.py
+      - name: keep audit results
+        uses: actions/upload-artifact@v7
+        with:
+          name: service-triage-audit
+          path: tests/eval/results/service-triage-audit.json
+          if-no-files-found: error

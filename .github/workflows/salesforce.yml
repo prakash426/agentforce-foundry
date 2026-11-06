@@ -1,0 +1,48 @@
+name: salesforce-validate
+on:
+  pull_request:
+  workflow_dispatch:
+jobs:
+  org-validate:
+    runs-on: ubuntu-latest
+    if: (github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository) && secrets.DX_AUTH_URL != ''
+    steps:
+      - uses: actions/checkout@v4
+      - name: show tool versions
+        run: node -v && npm -v && python3 -V
+      - name: install Salesforce CLI
+        run: npm i -g @salesforce/cli@2.157.8
+      - name: authorize validation org
+        env:
+          DX_AUTH_URL: ${{ secrets.DX_AUTH_URL }}
+        run: printf '%s' "$DX_AUTH_URL" > /tmp/sfdx-auth.txt && sf org login sfdx-url -f /tmp/sfdx-auth.txt -a ci-org && rm -f /tmp/sfdx-auth.txt
+      - name: validate deploy without saving
+        run: sf project deploy start -o ci-org -d force-app --dry-run -l RunSpecifiedTests -t ServiceTriageActionTest -w 10
+      - name: run Service Triage Apex tests
+        run: mkdir -p ci-results && sf apex run test -o ci-org -n ServiceTriageActionTest -r junit -d ci-results -w 10 -c
+      - name: run agent evaluation when configured
+        if: vars.AGENT_TEST_API_NAME != ''
+        run: sf agent test run -o ci-org -n ${{ vars.AGENT_TEST_API_NAME }} -w 10 -d ci-results --result-format junit
+      - name: keep org validation results
+        uses: actions/upload-artifact@v7
+        with:
+          name: org-validation-results
+          path: ci-results
+          if-no-files-found: warn
+  org-validation-status:
+    runs-on: ubuntu-latest
+    needs: [org-validate]
+    if: always()
+    steps:
+      - name: report org validation state
+        env:
+          VALIDATION_RESULT: ${{ needs.org-validate.result }}
+        run: |
+          if [ "$VALIDATION_RESULT" = "success" ]; then
+            echo "Org validation ran and passed. See the org-validation-results artifact."
+          else
+            echo "Org validation not run (job result: $VALIDATION_RESULT)."
+            echo "Prerequisites: a same repo run plus a DX_AUTH_URL repository secret holding a validation org auth URL."
+            echo "Agent evaluation additionally needs an AGENT_TEST_API_NAME repository variable pointing at a test created in that org."
+            echo "This is not deployment proof. It means the org path was skipped honestly."
+          fi

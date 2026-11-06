@@ -1,6 +1,20 @@
 {
-  "orgName": "Foundry Demo",
+  "orgName": "Foundry Service Triage",
   "edition": "Developer",
-  "hasSampleData": false,
+  "features": ["EnableSetPasswordInApi", "Einstein1AIPlatform"],
+  "settings": {
+    "lightningExperienceSettings": {
+      "enableS1DesktopEnabled": true
+    },
+    "mobileSettings": {
+      "enableS1EncryptedStoragePref2": false
+    },
+    "agentPlatformSettings": {
+      "enableAgentPlatform": true
+    },
+    "einsteinGptSettings": {
+      "enableEinsteinGptPlatform": true
+    }
+  },
   "adminEmail": "admin@foundry.example"
 }
