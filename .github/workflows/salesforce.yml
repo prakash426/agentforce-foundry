@@ -36,7 +36,7 @@ jobs:
     steps:
       - name: report org validation state
         env:
-          VALIDATION_RESULT: ${{ needs.org-validate.result }}
+          VALIDATION_RESULT: ${{ needs['org-validate'].result }}
         run: |
           if [ "$VALIDATION_RESULT" = "success" ]; then
             echo "Org validation ran and passed. See the org-validation-results artifact."
