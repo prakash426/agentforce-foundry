@@ -20,6 +20,8 @@ def check_apex():
     "test": (base / "ServiceTriageActionTest.cls").exists(),
     "sales_action": (base / "SalesQualificationAction.cls").exists(),
     "sales_test": (base / "SalesQualificationActionTest.cls").exists(),
+    "it_action": (base / "InternalHelpAction.cls").exists(),
+    "it_test": (base / "InternalHelpActionTest.cls").exists(),
   }
 
 def run():
