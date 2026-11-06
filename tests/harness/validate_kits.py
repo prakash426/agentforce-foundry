@@ -14,14 +14,18 @@ def check_kit(name):
   }
 
 def check_apex():
-  cls = ROOT / "force-app" / "main" / "default" / "classes" / "ServiceTriageAction.cls"
-  tst = ROOT / "force-app" / "main" / "default" / "classes" / "ServiceTriageActionTest.cls"
-  return {"action": cls.exists(), "test": tst.exists()}
+  base = ROOT / "force-app" / "main" / "default" / "classes"
+  return {
+    "action": (base / "ServiceTriageAction.cls").exists(),
+    "test": (base / "ServiceTriageActionTest.cls").exists(),
+    "sales_action": (base / "SalesQualificationAction.cls").exists(),
+    "sales_test": (base / "SalesQualificationActionTest.cls").exists(),
+  }
 
 def run():
   kits = [check_kit(k) for k in KITS]
   apex = check_apex()
-  ok = all(k["readme"] for k in kits) and apex["action"] and apex["test"]
+  ok = all(k["readme"] for k in kits) and all(apex.values())
   return {"kits": kits, "apex": apex, "ok": ok}
 
 if __name__ == "__main__":

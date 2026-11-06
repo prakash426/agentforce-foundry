@@ -18,6 +18,15 @@ class ValidatorTest(unittest.TestCase):
     out = v.run()
     svc = [k for k in out["kits"] if k["kit"] == "service-triage"][0]
     self.assertTrue(svc["readme"])
+    self.assertTrue(svc["suite"])
+
+  def test_sales_kit_present(self):
+    out = v.run()
+    self.assertTrue(out["apex"]["sales_action"])
+    self.assertTrue(out["apex"]["sales_test"])
+    sq = [k for k in out["kits"] if k["kit"] == "sales-qualification"][0]
+    self.assertTrue(sq["readme"])
+    self.assertTrue(sq["suite"])
 
 if __name__ == "__main__":
   unittest.main()
