@@ -26,7 +26,7 @@
 
 ## What CI runs
 1. foundry-ci on every push and pull request: validator, harness unit checks, scenario audit. Keeps the audit JSON as an artifact.
-2. salesforce-validate on pull requests and manual dispatch: deploy validation without saving, Apex run with junit, optional agent eval when configured. Runs only for same repo runs with a DX_AUTH_URL secret. Otherwise the job skips and the status job says plainly that org validation did not run. A skip is never presented as proof.
+2. salesforce-validate on pull requests and manual dispatch: deploy validation without saving, Apex run with junit, optional agent eval when configured. Fork pull requests skip the org job entirely. Same repo runs without a DX_AUTH_URL secret run a gate step that reports the skip honestly. The status job restates the outcome either way. A skip is never presented as proof.
 
 ## Pending verification
 1. First scratch org deploy.

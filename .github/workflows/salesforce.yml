@@ -5,30 +5,47 @@ on:
 jobs:
   org-validate:
     runs-on: ubuntu-latest
-    if: (github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository) && secrets.DX_AUTH_URL != ''
+    outputs:
+      has_secret: ${{ steps.gate.outputs.has_secret }}
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/checkout@v4
+      - id: gate
+        name: check for validation secret
+        run: echo "has_secret=${{ secrets.DX_AUTH_URL != '' }}" >> $GITHUB_OUTPUT
       - name: show tool versions
+        if: steps.gate.outputs.has_secret == 'true'
         run: node -v && npm -v && python3 -V
       - name: install Salesforce CLI
+        if: steps.gate.outputs.has_secret == 'true'
         run: npm i -g @salesforce/cli@2.157.8
       - name: authorize validation org
+        if: steps.gate.outputs.has_secret == 'true'
         env:
           DX_AUTH_URL: ${{ secrets.DX_AUTH_URL }}
         run: printf '%s' "$DX_AUTH_URL" > /tmp/sfdx-auth.txt && sf org login sfdx-url -f /tmp/sfdx-auth.txt -a ci-org && rm -f /tmp/sfdx-auth.txt
       - name: validate deploy without saving
+        if: steps.gate.outputs.has_secret == 'true'
         run: sf project deploy start -o ci-org -d force-app --dry-run -l RunSpecifiedTests -t ServiceTriageActionTest -w 10
       - name: run Service Triage Apex tests
+        if: steps.gate.outputs.has_secret == 'true'
         run: mkdir -p ci-results && sf apex run test -o ci-org -n ServiceTriageActionTest -r junit -d ci-results -w 10 -c
       - name: run agent evaluation when configured
-        if: vars.AGENT_TEST_API_NAME != ''
+        if: steps.gate.outputs.has_secret == 'true' && vars.AGENT_TEST_API_NAME != ''
         run: sf agent test run -o ci-org -n ${{ vars.AGENT_TEST_API_NAME }} -w 10 -d ci-results --result-format junit
       - name: keep org validation results
+        if: steps.gate.outputs.has_secret == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: org-validation-results
           path: ci-results
           if-no-files-found: warn
+      - name: report skipped validation
+        if: steps.gate.outputs.has_secret != 'true'
+        run: |
+          echo "Org validation not run: no DX_AUTH_URL repository secret present."
+          echo "Add the secret plus an optional AGENT_TEST_API_NAME variable to enable this path."
+          echo "This is not deployment proof. It means the org path was skipped honestly."
   org-validation-status:
     runs-on: ubuntu-latest
     needs: [org-validate]
@@ -37,12 +54,15 @@ jobs:
       - name: report org validation state
         env:
           VALIDATION_RESULT: ${{ needs['org-validate'].result }}
+          HAS_SECRET: ${{ needs['org-validate'].outputs.has_secret }}
         run: |
-          if [ "$VALIDATION_RESULT" = "success" ]; then
+          if [ "$VALIDATION_RESULT" = "skipped" ]; then
+            echo "Org validation not run: fork pull requests are excluded from org access."
+          elif [ "$VALIDATION_RESULT" = "success" ] && [ "$HAS_SECRET" != "true" ]; then
+            echo "Org validation not run: no DX_AUTH_URL repository secret present."
+          elif [ "$VALIDATION_RESULT" = "success" ]; then
             echo "Org validation ran and passed. See the org-validation-results artifact."
           else
-            echo "Org validation not run (job result: $VALIDATION_RESULT)."
-            echo "Prerequisites: a same repo run plus a DX_AUTH_URL repository secret holding a validation org auth URL."
-            echo "Agent evaluation additionally needs an AGENT_TEST_API_NAME repository variable pointing at a test created in that org."
-            echo "This is not deployment proof. It means the org path was skipped honestly."
+            echo "Org validation finished with result: $VALIDATION_RESULT. See the job log."
           fi
+          echo "Agent evaluation additionally needs an AGENT_TEST_API_NAME repository variable pointing at a test created in that org."
