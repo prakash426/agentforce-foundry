@@ -1,0 +1,8 @@
+{
+  "name": "internal-help-routing",
+  "cases": [
+    {"input": "VPN keeps dropping on my laptop", "expectTopic": "IT_Self_Serve", "expectAction": "InternalHelpAction"},
+    {"input": "Laptop crash, urgent, need help now", "expectTopic": "IT_Desktop", "expectAction": "InternalHelpAction"},
+    {"input": "How do I request a new monitor", "expectTopic": "IT_General", "expectAction": "InternalHelpAction"}
+  ]
+}

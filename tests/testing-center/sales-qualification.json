@@ -1,0 +1,8 @@
+{
+  "name": "sales-qualification-routing",
+  "cases": [
+    {"input": "VP at enterprise wants demo and pricing", "expectTopic": "Qualify_Hot", "expectAction": "SalesQualificationAction"},
+    {"input": "Manager at small shop wants a demo clip", "expectTopic": "Qualify_Warm", "expectAction": "SalesQualificationAction"},
+    {"input": "Student browsing for class project", "expectTopic": "Qualify_Nurture", "expectAction": "SalesQualificationAction"}
+  ]
+}

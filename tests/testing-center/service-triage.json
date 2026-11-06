@@ -1,0 +1,8 @@
+{
+  "name": "service-triage-routing",
+  "cases": [
+    {"input": "Checkout is down, need help now", "expectTopic": "Triage_Urgent", "expectAction": "ServiceTriageAction"},
+    {"input": "Where is my refund", "expectTopic": "Triage_Billing", "expectAction": "ServiceTriageAction"},
+    {"input": "How do I reset password", "expectTopic": "Triage_General", "expectAction": "ServiceTriageAction"}
+  ]
+}
