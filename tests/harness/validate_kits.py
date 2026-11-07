@@ -179,6 +179,7 @@ SHELL_SCRIPTS = [
   "scripts/setup.sh",
   "scripts/create-service-triage-test.sh",
   "scripts/preview-service-triage-turns.sh",
+  "scripts/setup-agent-user.sh",
 ]
 DOC_FILES = [
   "README.md",

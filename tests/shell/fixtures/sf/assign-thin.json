@@ -1,0 +1,15 @@
+{
+  "status": 0,
+  "result": {
+    "records": [
+      {
+        "PermissionSet": {
+          "Name": "AgentforceServiceAgentBase"
+        }
+      }
+    ],
+    "totalSize": 1,
+    "done": true
+  },
+  "warnings": []
+}

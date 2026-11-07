@@ -1,0 +1,18 @@
+{
+  "status": 0,
+  "result": {
+    "records": [
+      {
+        "Id": "005000000000003",
+        "Username": "agent@example.com",
+        "IsActive": false,
+        "Profile": {
+          "Name": "Einstein Agent User"
+        }
+      }
+    ],
+    "totalSize": 1,
+    "done": true
+  },
+  "warnings": []
+}

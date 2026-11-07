@@ -82,7 +82,6 @@ jobs:
         name: check for Dev Hub secret
         run: |
           echo "has_secret=${{ secrets.DX_AUTH_URL != '' }}" >> $GITHUB_OUTPUT
-          echo "has_agent_user=${{ secrets.AGENT_USER != '' }}" >> $GITHUB_OUTPUT
       - name: install Salesforce CLI
         if: steps.gate.outputs.has_secret == 'true'
         run: npm i -g @salesforce/cli@2.157.8
@@ -111,6 +110,13 @@ jobs:
           set -o pipefail
           sf org assign permset -n Agentforce_Foundry_Service -o ci-triage --json | tee scratch-results/permset.json
           python3 scripts/verify_sf_output.py json scratch-results/permset.json
+      - name: establish agent runtime user in scratch org
+        if: steps.gate.outputs.has_secret == 'true'
+        run: |
+          set -o pipefail
+          ORG_ALIAS=ci-triage bash scripts/setup-agent-user.sh 2>&1 | tee scratch-results/agent-user-setup.log
+          mv agent-user-ci-triage*.json scratch-results/
+          python3 -c 'import json; print("runtime user:", json.load(open("scratch-results/agent-user-ci-triage.json"))["username"])'
       - name: run Apex tests against installed candidate code
         if: steps.gate.outputs.has_secret == 'true'
         run: |
@@ -128,14 +134,14 @@ jobs:
           sf agent validate authoring-bundle -n Service_Triage_Agent -o ci-triage --json | tee scratch-results/agent-validate.json
           python3 scripts/verify_sf_output.py agent-validate scratch-results/agent-validate.json
       - name: publish candidate agent version
-        if: steps.gate.outputs.has_secret == 'true' && steps.gate.outputs.has_agent_user == 'true'
-        env:
-          AGENT_USER: ${{ secrets.AGENT_USER }}
+        if: steps.gate.outputs.has_secret == 'true'
         run: |
           set -o pipefail
+          RUNTIME_USER="$(python3 -c 'import json; print(json.load(open("scratch-results/agent-user-ci-triage.json"))["username"])')"
+          echo "Publishing with runtime user $RUNTIME_USER"
           ls force-app/main/default/bots/Service_Triage_Agent > scratch-results/publish-before.txt 2>/dev/null || true
           cp force-app/main/default/aiAuthoringBundles/Service_Triage_Agent/Service_Triage_Agent.agent /tmp/agent-backup.agent
-          sed "s/UPDATE_WITH_DEFAULT_AGENT_USER/$AGENT_USER/" /tmp/agent-backup.agent > force-app/main/default/aiAuthoringBundles/Service_Triage_Agent/Service_Triage_Agent.agent
+          sed "s/UPDATE_WITH_DEFAULT_AGENT_USER/$RUNTIME_USER/" /tmp/agent-backup.agent > force-app/main/default/aiAuthoringBundles/Service_Triage_Agent/Service_Triage_Agent.agent
           set +e
           sf agent publish authoring-bundle -n Service_Triage_Agent -o ci-triage --json | tee scratch-results/agent-publish.json
           PUBLISH_STATUS=${PIPESTATUS[0]}
@@ -147,31 +153,31 @@ jobs:
             exit "$PUBLISH_STATUS"
           fi
       - name: verify publish and determine candidate version
-        if: steps.gate.outputs.has_secret == 'true' && steps.gate.outputs.has_agent_user == 'true'
+        if: steps.gate.outputs.has_secret == 'true'
         run: |
           python3 scripts/verify_sf_output.py agent-publish scratch-results/agent-publish.json
           ls force-app/main/default/bots/Service_Triage_Agent | tee scratch-results/published-versions.txt
           ls force-app/main/default/bots/Service_Triage_Agent > scratch-results/publish-after.txt
           python3 scripts/verify_sf_output.py publish-diff scratch-results/publish-before.txt scratch-results/publish-after.txt | tee scratch-results/agent-version.txt
       - name: activate candidate in the disposable org
-        if: steps.gate.outputs.has_secret == 'true' && steps.gate.outputs.has_agent_user == 'true'
+        if: steps.gate.outputs.has_secret == 'true'
         run: |
           set -o pipefail
           CANDIDATE="$(cat scratch-results/agent-version.txt)"
           echo "Activating $CANDIDATE in disposable org ci-triage (user org activation stays a later manual choice)."
           sf agent activate -n Service_Triage_Agent --version "${CANDIDATE#v}" -o ci-triage --json | tee scratch-results/agent-activate.json
           python3 scripts/verify_sf_output.py agent-activate scratch-results/agent-activate.json --expect-version "${CANDIDATE#v}"
-      - name: resolve spec names against published metadata
-        if: steps.gate.outputs.has_secret == 'true' && steps.gate.outputs.has_agent_user == 'true'
-        run: python3 tests/eval/resolve_eval_metadata.py --spec scratch-results/Service_Triage-testSpec.yaml --map scratch-results/Service_Triage-testMap.json --project-root . --out-spec scratch-results/Service_Triage-testSpec.resolved.yaml --report scratch-results/resolve-report.json --agent Service_Triage_Agent
+      - name: resolve spec names against the candidate version
+        if: steps.gate.outputs.has_secret == 'true'
+        run: python3 tests/eval/resolve_eval_metadata.py --spec scratch-results/Service_Triage-testSpec.yaml --map scratch-results/Service_Triage-testMap.json --agent Service_Triage_Agent --version "$(cat scratch-results/agent-version.txt)" --project-root . --out-spec scratch-results/Service_Triage-testSpec.resolved.yaml --report scratch-results/resolve-report.json
       - name: create agent test from resolved spec
-        if: steps.gate.outputs.has_secret == 'true' && steps.gate.outputs.has_agent_user == 'true'
+        if: steps.gate.outputs.has_secret == 'true'
         run: |
           set -o pipefail
           sf agent test create --spec scratch-results/Service_Triage-testSpec.resolved.yaml --api-name Service_Triage_Agent_Test --force-overwrite -o ci-triage --json | tee scratch-results/agent-test-create.json
           python3 scripts/verify_sf_output.py agent-test-create scratch-results/agent-test-create.json
       - name: run agent test and score against thresholds
-        if: steps.gate.outputs.has_secret == 'true' && steps.gate.outputs.has_agent_user == 'true'
+        if: steps.gate.outputs.has_secret == 'true'
         env:
           PR_HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
@@ -182,7 +188,7 @@ jobs:
           echo "$RUN_LINE"
           RUN_ID="$(echo "$RUN_LINE" | sed -n 's/^agent-test-run id=//p')"
           CANDIDATE="$(cat scratch-results/agent-version.txt)"
-          python3 tests/eval/check_agent_results.py --results scratch-results/agent-eval --map scratch-results/Service_Triage-testMap.json --commit "$GITHUB_SHA" --pr-head "$PR_HEAD" --agent-version "$CANDIDATE" --run-id "$RUN_ID" --out scratch-results/service-triage-eval.json
+          python3 tests/eval/check_agent_results.py --results scratch-results/agent-eval --map scratch-results/Service_Triage-testMap.json --commit "$GITHUB_SHA" --pr-head "$PR_HEAD" --agent-version "$CANDIDATE" --run-id "$RUN_ID" --resolve-report scratch-results/resolve-report.json --out scratch-results/service-triage-eval.json
       - id: phase
         name: record scratch phase statuses from payloads
         if: always() && steps.gate.outputs.has_secret == 'true'
@@ -223,18 +229,13 @@ jobs:
                        and bool(version) and isinstance(activate, dict)
                        and activate.get("success") is True
                        and str(activate.get("version")) == version.lstrip("v"))
-          if publish is None and "${{ steps.gate.outputs.has_agent_user }}" != "true":
-            print("publish_status=not_configured")
-          else:
-            print("publish_status=" + ("published" if published else "failed"))
+          print("publish_status=" + ("published" if published else "failed"))
           print("agent_version=" + (version or "none"))
           evaluation = unwrap_main("service-triage-eval.json")
           run_stdout = payload("agent-test-run.json")
           run_id = run_stdout.get("runId", "") if isinstance(run_stdout, dict) else ""
           print("eval_run_id=" + str(run_id or "none"))
-          if evaluation is None and "${{ steps.gate.outputs.has_agent_user }}" != "true":
-            print("eval_status=not_configured")
-          elif isinstance(evaluation, dict) and evaluation.get("ok") is True:
+          if isinstance(evaluation, dict) and evaluation.get("ok") is True:
             print("eval_status=evaluated")
           else:
             print("eval_status=failed")
@@ -306,4 +307,4 @@ jobs:
             echo "Status: failed. Publish or evaluation phase failed."
             exit 1
           fi
-          echo "Status: passed with noted phases. Anything marked not_configured was skipped honestly, never as proof."
+          echo "Status: passed. Validation, deploy, Apex, publish, and evaluation all verified from payloads."

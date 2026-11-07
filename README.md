@@ -74,7 +74,7 @@ Details live in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 - Python 3.11 or newer (CI runs 3.11; scripts use the standard library only).
 - Bash for org scripts (they require `pipefail` plus JSON verification).
-- Salesforce CLI 2.x with the agent plugin (CI pins `@salesforce/cli@2.157.8`). Verified locally against CLI help text plus agent plugin sources.
+- Salesforce CLI with the agent plugin. CI pins `@salesforce/cli@2.157.8`. Agent user creation is verified on 2.145.6 and on the pinned 2.157.8; older CLIs may lack the command.
 - Git plus a GitHub account for the workflows.
 - For org paths: an Agentforce enabled org. Scratch orgs use Developer edition with the Einstein AI platform feature plus agent platform settings from [config/project-scratch-def.json](config/project-scratch-def.json). Source API version 60.0.
 
@@ -102,7 +102,7 @@ sf org login web -a my-dev-org
 USE_EXISTING_ORG=1 ORG_ALIAS=my-dev-org bash scripts/setup-service-triage.sh
 ```
 
-The script deploys dependencies, validates the authoring bundle, publishes an inactive candidate version, assigns the permission set, and runs Apex tests against installed code. Then follow the manual steps: confirm the agent user, activate a published version, preview, and run the converted evaluation. Full sequence below.
+The script deploys dependencies, creates the agent runtime user (or verifies one supplied through `AGENT_USER`), assigns the custom permission set to the admin and runtime users, validates the authoring bundle, publishes an inactive candidate version, and runs Apex tests against installed code. Then follow the manual steps: activate a published version, preview, and run the converted evaluation. Full sequence below.
 
 ## Scratch org path
 
@@ -112,7 +112,7 @@ Needs a Dev Hub with scratch org creation rights.
 DEV_HUB=my-hub bash scripts/setup-service-triage.sh
 ```
 
-To set the agent user at publish time (recommended, never committed):
+The script creates the agent runtime user automatically and stops before validation if user setup fails. To verify an existing user instead of creating one:
 
 ```sh
 DEV_HUB=my-hub AGENT_USER=agent.user@example.com bash scripts/setup-service-triage.sh
@@ -126,18 +126,24 @@ Each stage is distinct. The scripts and CI enforce the order and verify every st
 
 1. Deploy dependencies: Apex classes plus permission sets install first, so live actions exist before the agent runs.
 2. Validation only deploy (CI): a dry run of the Service manifest with its own test and coverage results. Validation saves nothing and proves nothing about installed code.
-3. Authoring bundle validation: `sf agent validate` compiles the Agent Script. A pass means it compiles, not that it is published.
-4. Publish: `sf agent publish` creates an inactive candidate version plus its Bot and planner metadata, retrieved back to the project. Deployment alone never creates a version.
-5. Activate: `sf agent activate` makes one version live. Publishing leaves versions inactive by design. Activation in your own org stays an explicit manual choice; CI activates only inside its disposable scratch org.
-6. Apex tests: run against installed candidate code with coverage kept.
-7. Agent evaluation: convert committed scenarios to a test spec, resolve names against published metadata, create the test, run it, and score results against catalog thresholds with commit and version recorded.
-8. Sequential preview (optional): send scripted multi-turn conversations through preview sessions and keep transcripts.
+3. Runtime user: create an agent user with the supported CLI command, or verify a supplied existing user, then assign the custom Service permission set to that user. Validation and publishing never run without a valid user.
+4. Authoring bundle validation: `sf agent validate` compiles the Agent Script. A pass means it compiles, not that it is published.
+5. Publish: `sf agent publish` creates an inactive candidate version plus its Bot and planner metadata, retrieved back to the project. Deployment alone never creates a version.
+6. Activate: `sf agent activate` makes one version live. Publishing leaves versions inactive by design. Activation in your own org stays an explicit manual choice; CI activates only inside its disposable scratch org.
+7. Apex tests: run against installed candidate code with coverage kept.
+8. Agent evaluation: convert committed scenarios to a test spec, resolve names against the selected candidate version only, create the test, run it, and score results against catalog thresholds with commit, version, and run id recorded.
+9. Sequential preview (optional): send scripted multi-turn conversations through preview sessions and keep transcripts.
 
 ## Agent user and permissions
 
-- The committed agent file holds an `UPDATE_WITH_DEFAULT_AGENT_USER` placeholder. Resolve it at publish time with `AGENT_USER`, or set the default agent user in Agentforce Studio afterward. Never commit a real username; scripts restore the placeholder automatically.
-- Assign the `Agentforce_Foundry_Service` permission set to the admin user (automated) and to the agent runtime user (manual step in the org).
-- The agent runtime user needs Apex class access through that permission set. No other permissions are required in v1.
+The runtime user needs org platform entitlements plus the custom Apex permission set. Apex access alone is not sufficient.
+
+- Profile: `Einstein Agent User`, provided by the CLI creation command.
+- Licenses: the org must offer the agent user profile with available user licenses. Creation checks this and fails with guidance when licenses are absent or exhausted. Provisioning comes from Agentforce enablement; contact the account team for more.
+- Platform permission sets, assigned by the creation command: `AgentforceServiceAgentBase`, `AgentforceServiceAgentUser`, `EinsteinGPTPromptTemplateUser`.
+- Custom permission set: `Agentforce_Foundry_Service`, assigned by the setup scripts to the admin user and to the runtime user, granting Apex class access.
+- The committed agent file holds an `UPDATE_WITH_DEFAULT_AGENT_USER` placeholder. Scripts resolve it to the established runtime user for validation and publishing only, then restore the placeholder automatically. Never commit a real username.
+- Creation is automatic in scratch orgs (`scripts/setup-agent-user.sh` runs inside setup). In an existing org, either let the script create a user or export `AGENT_USER` with a username to verify; verification requires an active user with the required profile and platform permission sets.
 
 ## Example conversations (unexecuted)
 
@@ -165,6 +171,7 @@ Agent: I can triage this once I know more. What is the issue, and who or what is
 | Script failure modes | `python3 tests/shell/test_script_failure_modes.py` | Fail stop behavior plus file restoration |
 | Apex tests (needs org) | `sf apex run test -n ServiceTriageActionTest` | Classifier contract on installed code |
 | Agent eval (needs org) | `sf agent test run` plus checker | Routing and responses per thresholds |
+| Sequential preview (needs org) | `scripts/preview-service-triage-turns.sh` | Multi-turn transcripts plus smoke checks |
 
 CI runs every offline layer on each push and pull request, plus honest org gated jobs that skip without secrets. See [docs/TESTING.md](docs/TESTING.md) for what each layer proves and never proves.
 

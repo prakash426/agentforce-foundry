@@ -34,7 +34,8 @@ python3 tests/eval/convert_service_scenarios.py --out-spec "$SPEC" --out-map "$M
 
 echo "Step 2 of 5: resolve expected topics and actions against published metadata"
 python3 tests/eval/resolve_eval_metadata.py --spec "$SPEC" --map "$MAP" \
-  --project-root . --out-spec "$RESOLVED_SPEC" --report "$RESOLVE_REPORT" --agent "$SUBJECT"
+  --agent "$SUBJECT" --version "$AGENT_VERSION" \
+  --project-root . --out-spec "$RESOLVED_SPEC" --report "$RESOLVE_REPORT"
 
 echo "Step 3 of 5: confirm candidate version $AGENT_VERSION exists locally"
 VERSION_NUM="$(echo "$AGENT_VERSION" | sed 's/^v//')"
@@ -62,13 +63,14 @@ if [ "${RUN_TEST:-0}" = "1" ]; then
     exit 1
   fi
   python3 tests/eval/check_agent_results.py --results agent-results --map "$MAP" \
-    --commit "$(git rev-parse HEAD)" --agent-version "$AGENT_VERSION" --run-id "$RUN_ID"
+    --commit "$(git rev-parse HEAD)" --agent-version "$AGENT_VERSION" --run-id "$RUN_ID" \
+    --resolve-report "$RESOLVE_REPORT"
 else
   echo "Step 5 of 5: run skipped (set RUN_TEST=1 to run and score)"
   echo "Run manually with:"
   echo "  sf agent test run -n $TEST_API_NAME -o $ALIAS -w 10 --result-format json -d agent-results --json"
   echo "then score with:"
-  echo "  python3 tests/eval/check_agent_results.py --results agent-results --commit <sha> --agent-version $AGENT_VERSION --run-id <runId>"
+  echo "  python3 tests/eval/check_agent_results.py --results agent-results --commit <sha> --agent-version $AGENT_VERSION --run-id <runId> --resolve-report $RESOLVE_REPORT"
 fi
 
 echo "Done. Candidate commit: $(git rev-parse HEAD 2>/dev/null || echo unknown). Agent version: $AGENT_VERSION."

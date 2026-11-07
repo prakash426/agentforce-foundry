@@ -27,7 +27,7 @@ jobs:
       - name: convert scenarios to a test spec
         run: python3 tests/eval/convert_service_scenarios.py --out-spec specs/Service_Triage_Agent-testSpec.yaml --out-map specs/Service_Triage_Agent-testMap.json
       - name: check shell script syntax
-        run: bash -n scripts/setup-service-triage.sh && bash -n scripts/setup.sh && bash -n scripts/create-service-triage-test.sh && bash -n scripts/preview-service-triage-turns.sh && bash -n scripts/lib/sf_steps.sh && bash -n tests/shell/fake_sf.sh && echo "shell syntax ok"
+        run: bash -n scripts/setup-service-triage.sh && bash -n scripts/setup.sh && bash -n scripts/create-service-triage-test.sh && bash -n scripts/preview-service-triage-turns.sh && bash -n scripts/setup-agent-user.sh && bash -n scripts/lib/sf_steps.sh && bash -n tests/shell/fake_sf.sh && echo "shell syntax ok"
       - name: keep audit results
         uses: actions/upload-artifact@v7
         with:

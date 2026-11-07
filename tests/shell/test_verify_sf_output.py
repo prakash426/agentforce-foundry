@@ -131,6 +131,62 @@ class AgentVerifyTest(unittest.TestCase):
     self.assertIn("does not match", err)
 
 
+class AgentUserVerifyTest(unittest.TestCase):
+  def test_create_ok(self):
+    code, out, _ = run("agent-user-create", str(FIX / "agentuser-ok.json"))
+    self.assertEqual(0, code)
+    self.assertIn("agent.user.abc123@example.com", out)
+
+  def test_create_perm_errors_rejected(self):
+    code, _, err = run("agent-user-create", str(FIX / "agentuser-permfail.json"))
+    self.assertEqual(1, code)
+    self.assertIn("permission errors", err)
+
+  def test_user_query_ok(self):
+    code, out, _ = run("user-query", str(FIX / "userqry-ok.json"),
+                       "--expect-username", "agent@example.com",
+                       "--expect-profile", "Einstein Agent User")
+    self.assertEqual(0, code)
+    self.assertIn("005000000000001", out)
+
+  def test_user_query_missing_rejected(self):
+    code, _, err = run("user-query", str(FIX / "userqry-missing.json"),
+                       "--expect-username", "agent@example.com",
+                       "--expect-profile", "Einstein Agent User")
+    self.assertEqual(1, code)
+    self.assertIn("exactly one user", err)
+
+  def test_user_query_inactive_rejected(self):
+    code, _, err = run("user-query", str(FIX / "userqry-inactive.json"),
+                       "--expect-username", "agent@example.com",
+                       "--expect-profile", "Einstein Agent User")
+    self.assertEqual(1, code)
+    self.assertIn("not active", err)
+
+  def test_user_query_profile_rejected(self):
+    code, _, err = run("user-query", str(FIX / "userqry-profile.json"),
+                       "--expect-username", "agent@example.com",
+                       "--expect-profile", "Einstein Agent User")
+    self.assertEqual(1, code)
+    self.assertIn("Standard User", err)
+
+  def test_assignment_query_ok(self):
+    code, out, _ = run("assignment-query", str(FIX / "assign-full.json"),
+                       "--expect", "AgentforceServiceAgentBase",
+                       "--expect", "AgentforceServiceAgentUser",
+                       "--expect", "EinsteinGPTPromptTemplateUser",
+                       "--expect", "Agentforce_Foundry_Service")
+    self.assertEqual(0, code)
+    self.assertIn("Agentforce_Foundry_Service", out)
+
+  def test_assignment_query_missing_rejected(self):
+    code, _, err = run("assignment-query", str(FIX / "assign-thin.json"),
+                       "--expect", "AgentforceServiceAgentBase",
+                       "--expect", "AgentforceServiceAgentUser")
+    self.assertEqual(1, code)
+    self.assertIn("AgentforceServiceAgentUser", err)
+
+
 class PublishDiffTest(unittest.TestCase):
   def test_single_new_version(self):
     import tempfile

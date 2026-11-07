@@ -27,6 +27,8 @@ Inputs:
   --commit SHA     checked out source commit that was tested
   --pr-head SHA    pull request head commit, when CI tested a merge commit
   --agent-version  candidate agent version activated for the run
+  --resolve-report PATH to the resolver report; when given, its agent
+                   and version must match the evaluated candidate
   --run-id ID      run identifier captured from CLI stdout (verified
                    against the result filename when both exist)
   --out PATH       evaluation record output (default
@@ -188,7 +190,13 @@ def check_mapping(mapping, catalog):
   return {c["testNumber"]: c for c in manifest_cases}
 
 
-def check(results_path, map_path, catalog_path, commit, agent_version, run_id, pr_head=""):
+def normalize_version(value):
+  text = str(value or "").strip()
+  return text[1:] if text.startswith("v") else text
+
+
+def check(results_path, map_path, catalog_path, commit, agent_version, run_id, pr_head="",
+          resolve_report_path=None):
   del ERRORS[:]
   results_file = find_results_file(results_path)
   if results_file is None:
@@ -228,6 +236,17 @@ def check(results_path, map_path, catalog_path, commit, agent_version, run_id, p
   by_number = check_mapping(mapping, catalog)
   if by_number is None:
     return None
+  resolved_candidate = None
+  if resolve_report_path is not None:
+    report = load_json(resolve_report_path)
+    if report is None:
+      return None
+    if report.get("agent") != expected_subject or normalize_version(report.get("version")) != normalize_version(agent_version):
+      fail("resolver report candidate %s %s does not match evaluated %s %s" % (
+        report.get("agent"), report.get("version"), expected_subject, agent_version))
+      return None
+    resolved_candidate = {"agent": report.get("agent"), "version": report.get("version"),
+                          "planner": report.get("planner", "")}
   cases = results["testCases"]
   if not cases:
     fail("results hold zero test cases for %d required scenarios" % len(by_number))
@@ -338,6 +357,7 @@ def check(results_path, map_path, catalog_path, commit, agent_version, run_id, p
                 "required": len(by_number), "by_category": by_category},
     "threshold_failures": threshold_failures,
     "cases": evaluated,
+    "resolved_candidate": resolved_candidate,
     "ok": ok,
   }
 
@@ -372,6 +392,7 @@ def main(argv):
   agent_version = os.environ.get("AGENT_VERSION", "")
   run_id = ""
   pr_head = os.environ.get("PR_HEAD", "")
+  resolve_report = None
   args = list(argv)
   while args:
     arg = args.pop(0)
@@ -385,6 +406,8 @@ def main(argv):
       commit = args.pop(0)
     elif arg == "--pr-head" and args:
       pr_head = args.pop(0)
+    elif arg == "--resolve-report" and args:
+      resolve_report = Path(args.pop(0))
     elif arg == "--agent-version" and args:
       agent_version = args.pop(0)
     elif arg == "--run-id" and args:
@@ -397,7 +420,8 @@ def main(argv):
   if results_path is None:
     print("check error: --results is required", file=sys.stderr)
     return 2
-  record = check(results_path, map_path, catalog_path, commit, agent_version, run_id, pr_head)
+  record = check(results_path, map_path, catalog_path, commit, agent_version, run_id, pr_head,
+                 resolve_report)
   if record is None:
     return write_failure(out_path, commit, agent_version, run_id)
   out_path.parent.mkdir(parents=True, exist_ok=True)

@@ -1,31 +1,31 @@
-"""Resolve eval spec topics and actions against published org metadata.
+"""Resolve eval spec topics and actions against one candidate version.
 
-Reads a converted test spec plus its mapping manifest, scans the DX
-project for GenAiPlugin and GenAiPlannerBundle metadata retrieved by
-publish, and resolves every expectedTopic and expectedAction to a real
-developer name. Fails before test creation on missing or ambiguous
-matches. Writes a resolved spec plus a report tying the spec to the
-candidate metadata snapshot. No org needed.
+Reads a converted test spec plus its mapping manifest, follows the
+selected BotVersion through its planner to exactly the topics and
+actions reachable from that candidate, and resolves every expected
+name within that reachable set only. Names that exist solely in
+another agent or version are rejected, never silently borrowed. Fails
+before test creation on missing, ambiguous, malformed, or dangling
+references. Writes a resolved spec plus a report recording the
+candidate, every traversed reference, and each decision. No org needed.
 
-Metadata shapes follow the structures the agent plugin itself parses:
-BotVersion carries conversationDefinitionPlanners with a planner name,
-GenAiPlannerBundle carries localTopics with action links and
-localTopicLinks with plugin names, and GenAiPlugin carries function
-names. Files are found by XML root tag, not by filename guess.
-
-Matching is exact first, then case-insensitive when exactly one
-candidate matches. Zero matches fail as missing. Multiple
-case-insensitive matches fail as ambiguous. The report records every
-substitution plus the metadata files and candidate versions seen, so
-the resolved spec stays tied to that candidate.
+Metadata relationships follow the structures the agent plugin itself
+parses: a BotVersion file names its planner through
+conversationDefinitionPlanners, a GenAiPlannerBundle links topics
+through localTopicLinks and actions through localTopics action links,
+and each GenAiPlugin names its functions. Metadata full names come
+from file names, the same way the platform derives them. No
+project-wide name search is used for resolution; the full project is
+consulted only to explain where an outside-candidate name lives.
 
 Usage:
   python3 tests/eval/resolve_eval_metadata.py --spec SPEC --map MAP
-    --project-root DIR --out-spec OUT --report REPORT
-    [--agent NAME]
+    --agent NAME --version N --project-root DIR --out-spec OUT
+    --report REPORT
 """
 import json
 import os
+import re
 import sys
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
@@ -43,66 +43,124 @@ def local_tag(tag):
   return tag.rsplit("}", 1)[-1] if "}" in tag else tag
 
 
-def child_text(node, name):
-  for child in node:
-    if local_tag(child.tag) == name and child.text and child.text.strip():
-      return child.text.strip()
-  return ""
+def full_name_of(path):
+  stem = path.name
+  if stem.endswith("-meta.xml"):
+    stem = stem[: -len("-meta.xml")]
+  return stem.split(".", 1)[0] if "." in stem else stem
 
 
-def scan_metadata(root):
-  """Return (topics, actions, files, versions) from project metadata."""
-  topics, actions, files, versions = {}, {}, [], []
+def version_of_bot_file(path):
+  match = re.match(r"v(\d+)\b", path.name)
+  return match.group(1) if match else ""
+
+
+def parse_xml(path):
+  try:
+    return ET.parse(str(path)).getroot()
+  except ET.ParseError as exc:
+    fail("metadata file %s does not parse: %s" % (path, exc))
+    return None
+
+
+def find_bot_version(root, agent, version):
+  matches = []
   for path in sorted(root.rglob("*-meta.xml")):
+    if path.parent.name != agent:
+      continue
+    if version_of_bot_file(path) != version:
+      continue
     try:
       tree = ET.parse(str(path))
     except ET.ParseError:
+      return fail("candidate file %s does not parse" % path.relative_to(root))
+    if local_tag(tree.getroot().tag) != "BotVersion":
       continue
-    tag = local_tag(tree.getroot().tag)
-    rel = str(path.relative_to(root))
-    if tag == "GenAiPlugin":
-      files.append(rel)
-      stem = path.name
-      if stem.endswith("-meta.xml"):
-        stem = stem[: -len("-meta.xml")]
-      full_name = stem.rsplit(".", 1)[0] if "." in stem else stem
-      if full_name and full_name != "*":
-        topics[full_name] = rel
-      for node in tree.getroot().iter():
-        if local_tag(node.tag) == "functionName" and node.text and node.text.strip():
-          actions[node.text.strip()] = rel
-    elif tag == "GenAiPlannerBundle":
-      files.append(rel)
-      for node in tree.getroot().iter():
-        ltag = local_tag(node.tag)
-        if ltag == "functionName" and node.text and node.text.strip():
-          actions[node.text.strip()] = rel
-        if ltag == "genAiPluginName" and node.text and node.text.strip():
-          topics.setdefault(node.text.strip(), rel)
-    elif tag == "BotVersion":
-      files.append(rel)
-      versions.append(rel)
-  return topics, actions, sorted(set(files)), sorted(versions)
-
-
-def resolve_one(value, candidates, kind, case_ref):
-  if value in candidates:
-    return value, None
-  lowered = value.lower()
-  matches = sorted(name for name in candidates if name.lower() == lowered)
-  if len(matches) == 1:
-    return matches[0], "%s %s resolved %s to %s" % (kind, case_ref, value, matches[0])
+    matches.append(path)
   if not matches:
-    fail("%s %s has no metadata match for %s; known: %s" % (
-      kind, case_ref, value, ", ".join(sorted(candidates)) or "none"))
-    return None, None
-  fail("%s %s is ambiguous for %s; matches: %s" % (kind, case_ref, value, ", ".join(matches)))
-  return None, None
+    return fail("no BotVersion file for agent %s version v%s" % (agent, version))
+  if len(matches) > 1:
+    return fail("ambiguous BotVersion files for agent %s version v%s" % (agent, version))
+  return matches[0]
+
+
+def planner_of(bot_root):
+  for planners in bot_root.iter():
+    if local_tag(planners.tag) != "conversationDefinitionPlanners":
+      continue
+    for child in planners:
+      if local_tag(child.tag) == "genAiPlannerName" and child.text and child.text.strip():
+        return child.text.strip()
+  return ""
+
+
+def find_by_full_name(root, tag, name):
+  matches = []
+  for path in sorted(root.rglob("*-meta.xml")):
+    if full_name_of(path) != name:
+      continue
+    try:
+      parsed = ET.parse(str(path)).getroot()
+    except ET.ParseError:
+      continue
+    if local_tag(parsed.tag) == tag:
+      matches.append(path)
+  return matches
+
+
+def collect_planner_refs(planner_root):
+  topics = []
+  for node in planner_root.iter():
+    if local_tag(node.tag) == "genAiPluginName" and node.text and node.text.strip():
+      topics.append(node.text.strip())
+  actions = []
+  for node in planner_root.iter():
+    if local_tag(node.tag) == "functionName" and node.text and node.text.strip():
+      actions.append(node.text.strip())
+  return topics, actions
+
+
+def plugin_functions(plugin_root):
+  return [node.text.strip() for node in plugin_root.iter()
+          if local_tag(node.tag) == "functionName" and node.text and node.text.strip()]
+
+
+def project_names(root, tag):
+  names = set()
+  for path in root.rglob("*-meta.xml"):
+    if full_name_of(path) == "*":
+      continue
+    try:
+      parsed = ET.parse(str(path)).getroot()
+    except ET.ParseError:
+      continue
+    if local_tag(parsed.tag) == tag:
+      names.add(full_name_of(path))
+  return names
+
+
+def resolve_one(value, reachable, kind, case_ref, agent, version, elsewhere):
+  """Resolve within the reachable map of name to source file."""
+  if value in reachable:
+    return value, reachable[value], None
+  lowered = value.lower()
+  matches = sorted(name for name in reachable if name.lower() == lowered)
+  if len(matches) == 1:
+    return matches[0], reachable[matches[0]], "%s %s resolved %s to %s" % (kind, case_ref, value, matches[0])
+  if len(matches) > 1:
+    fail("%s %s is ambiguous for %s within %s v%s; matches: %s" % (
+      kind, case_ref, value, agent, version, ", ".join(matches)))
+    return None, None, None
+  if value in elsewhere or any(name.lower() == lowered for name in elsewhere):
+    fail("%s %s names %s, which exists only outside candidate %s v%s" % (
+      kind, case_ref, value, agent, version))
+  else:
+    fail("%s %s has no metadata match for %s in candidate %s v%s" % (
+      kind, case_ref, value, agent, version))
+  return None, None, None
 
 
 def parse_spec_cases(text):
-  """Parse the converter spec back into cases. Only the fields the
-  converter writes are read; anything else fails loudly."""
   cases = []
   current = None
   history = None
@@ -139,51 +197,132 @@ def parse_spec_cases(text):
   return cases
 
 
-def resolve_project(spec_text, mapping, root):
-  topics, actions, files, versions = scan_metadata(Path(root))
-  if not topics:
-    return fail("no GenAiPlugin topics found under %s; publish must retrieve first" % root)
+def normalize_version(value):
+  text = str(value).strip()
+  if text.startswith("v"):
+    text = text[1:]
+  return text if text.isdigit() else ""
+
+
+def resolve_candidate(spec_text, mapping, root, agent, version):
+  if not agent:
+    return fail("agent identity is required")
+  version = normalize_version(version)
+  if not version:
+    return fail("candidate version is required (for example 2 or v2)")
   if not isinstance(mapping, dict) or not isinstance(mapping.get("cases"), list):
     return fail("mapping manifest has no cases list")
+  if mapping.get("subjectName") != agent:
+    return fail("mapping subject %s does not match selected agent %s" % (
+      mapping.get("subjectName"), agent))
+  root = Path(root)
+  bot_file = find_bot_version(root, agent, version)
+  if bot_file is None:
+    return None
+  bot_root = parse_xml(bot_file)
+  if bot_root is None:
+    return None
+  planner = planner_of(bot_root)
+  if not planner:
+    return fail("BotVersion %s names no planner" % bot_file.relative_to(root))
+  bundles = find_by_full_name(root, "GenAiPlannerBundle", planner)
+  if not bundles:
+    return fail("planner %s referenced by %s v%s has no bundle file" % (planner, agent, version))
+  if len(bundles) > 1:
+    return fail("planner %s matches multiple bundle files" % planner)
+  bundle_file = bundles[0]
+  bundle_root = parse_xml(bundle_file)
+  if bundle_root is None:
+    return None
+  topic_refs, planner_actions = collect_planner_refs(bundle_root)
+  reachable_topics = {}
+  plugin_files = []
+  for ref in topic_refs:
+    plugins = find_by_full_name(root, "GenAiPlugin", ref)
+    if not plugins:
+      return fail("topic %s referenced by planner %s has no plugin file" % (ref, planner))
+    if len(plugins) > 1:
+      return fail("topic %s matches multiple plugin files" % ref)
+    rel = str(plugins[0].relative_to(root))
+    reachable_topics[ref] = rel
+    plugin_files.append(rel)
+    plugin_root = parse_xml(plugins[0])
+    if plugin_root is None:
+      return None
+  reachable_actions = {}
+  for action in planner_actions:
+    reachable_actions.setdefault(action, str(bundle_file.relative_to(root)))
+  for ref, rel in sorted(reachable_topics.items()):
+    plugin_root = parse_xml(root / rel)
+    if plugin_root is None:
+      return None
+    for action in plugin_functions(plugin_root):
+      reachable_actions.setdefault(action, rel)
+  elsewhere_topics = project_names(root, "GenAiPlugin") - set(reachable_topics)
   cases = parse_spec_cases(spec_text)
   if cases is None:
     return None
   if len(cases) != len(mapping["cases"]):
     return fail("spec holds %d cases but mapping holds %d" % (len(cases), len(mapping["cases"])))
+  elsewhere_actions = set()
+  for path in root.rglob("*-meta.xml"):
+    try:
+      parsed = ET.parse(str(path)).getroot()
+    except ET.ParseError:
+      continue
+    if local_tag(parsed.tag) in ("GenAiPlugin", "GenAiPlannerBundle"):
+      for node in parsed.iter():
+        if local_tag(node.tag) == "functionName" and node.text and node.text.strip():
+          elsewhere_actions.add(node.text.strip())
+  elsewhere_actions -= set(reachable_actions)
+  decisions = []
   substitutions = []
   for idx, case in enumerate(cases):
     ref = "case %d (%s)" % (idx + 1, mapping["cases"][idx].get("scenario_id"))
-    resolved_topic, note = resolve_one(case["expectedTopic"], topics, "topic", ref)
-    if resolved_topic is None:
+    topic, topic_source, note = resolve_one(
+      case["expectedTopic"], reachable_topics, "topic", ref, agent, version, elsewhere_topics)
+    if topic is None:
       return None
-    case["expectedTopic"] = resolved_topic
+    case["expectedTopic"] = topic
     if note:
       substitutions.append(note)
+    action_sources = []
     resolved_actions = []
     for action in case["expectedActions"]:
-      resolved_action, note = resolve_one(action, actions, "action", ref)
-      if resolved_action is None:
+      fixed, source, note = resolve_one(
+        action, reachable_actions, "action", ref, agent, version, elsewhere_actions)
+      if fixed is None:
         return None
-      resolved_actions.append(resolved_action)
+      resolved_actions.append(fixed)
+      action_sources.append(source)
       if note:
         substitutions.append(note)
     case["expectedActions"] = resolved_actions
     for turn in case["conversationHistory"]:
-      if "topic" in turn and turn["topic"] not in topics:
-        fixed, note = resolve_one(turn["topic"], topics, "history topic", ref)
+      if "topic" in turn:
+        fixed, _, note = resolve_one(
+          turn["topic"], reachable_topics, "history topic", ref, agent, version, elsewhere_topics)
         if fixed is None:
           return None
         turn["topic"] = fixed
         if note:
           substitutions.append(note)
+    decisions.append({"testNumber": idx + 1, "scenario_id": mapping["cases"][idx].get("scenario_id"),
+                      "expectedTopic": topic, "topicSource": topic_source,
+                      "expectedActions": resolved_actions, "actionSources": action_sources})
   report = {
     "kind": "eval-metadata-resolution",
     "generated_at": datetime.now(timezone.utc).isoformat(),
+    "agent": agent,
+    "version": "v" + version,
+    "planner": planner,
+    "bot_version_file": str(bot_file.relative_to(root)),
+    "planner_file": str(bundle_file.relative_to(root)),
+    "plugin_files": sorted(set(plugin_files)),
+    "reachable_topics": sorted(reachable_topics),
+    "reachable_actions": sorted(reachable_actions),
     "cases": len(cases),
-    "topics": sorted(topics),
-    "actions": sorted(actions),
-    "metadata_files": files,
-    "candidate_versions": versions,
+    "decisions": decisions,
     "substitutions": substitutions,
   }
   return cases, report
@@ -222,6 +361,8 @@ def main(argv):
   project_root = root
   out_spec = None
   report_path = None
+  agent = ""
+  version = ""
   args = list(argv)
   while args:
     arg = args.pop(0)
@@ -236,12 +377,17 @@ def main(argv):
     elif arg == "--report" and args:
       report_path = Path(args.pop(0))
     elif arg == "--agent" and args:
-      args.pop(0)
+      agent = args.pop(0)
+    elif arg == "--version" and args:
+      version = args.pop(0)
     else:
       print("resolve error: unknown argument " + arg, file=sys.stderr)
       return 2
   if not spec_path or not map_path or not out_spec or not report_path:
     print("resolve error: --spec, --map, --out-spec, and --report are required", file=sys.stderr)
+    return 2
+  if not agent or not version:
+    print("resolve error: --agent and --version are required", file=sys.stderr)
     return 2
   try:
     spec_text = spec_path.read_text()
@@ -251,7 +397,7 @@ def main(argv):
     return 1
   header = [line for line in spec_text.splitlines()
             if line.startswith(("name:", "description:", "subjectType:", "subjectName:"))]
-  result = resolve_project(spec_text, mapping, project_root)
+  result = resolve_candidate(spec_text, mapping, project_root, agent, version)
   if result is None:
     return 1
   cases, report = result
@@ -259,8 +405,8 @@ def main(argv):
   report_path.parent.mkdir(parents=True, exist_ok=True)
   out_spec.write_text(render_yaml(header, cases))
   report_path.write_text(json.dumps(report, indent=2))
-  print(json.dumps({"ok": True, "cases": len(cases),
-                    "substitutions": len(report["substitutions"]),
+  print(json.dumps({"ok": True, "agent": agent, "version": report["version"],
+                    "cases": len(cases), "substitutions": len(report["substitutions"]),
                     "spec": str(out_spec), "report": str(report_path)}, indent=2))
   return 0
 

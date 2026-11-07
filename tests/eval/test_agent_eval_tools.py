@@ -312,6 +312,35 @@ class CheckerTest(unittest.TestCase):
       direct = checker.check(res_path, map_path, cat_path, "same-sha", "v", "run-1", "same-sha")
       self.assertFalse(direct["tested_merge_commit"])
 
+  def test_resolve_report_match_recorded(self):
+    results = legacy_response([legacy_case(1), legacy_case(2), legacy_case(3)])
+    with tempfile.TemporaryDirectory() as tmp:
+      tmp = Path(tmp)
+      catalog = good_catalog()
+      res_path = write_json(tmp / "test-result-run-1.json", results)
+      _, manifest = conv.convert(catalog, "Service_Triage_Agent")
+      map_path = write_json(tmp / "map.json", manifest)
+      cat_path = write_json(tmp / "catalog.json", catalog)
+      rep_path = write_json(tmp / "resolve.json", {"agent": "Service_Triage_Agent",
+                                                   "version": "v2", "planner": "P"})
+      record = checker.check(res_path, map_path, cat_path, "c", "v2", "run-1", "", rep_path)
+      self.assertIsNotNone(record)
+      self.assertTrue(record["ok"])
+      self.assertEqual("v2", record["resolved_candidate"]["version"])
+
+  def test_resolve_report_mismatch_rejected(self):
+    results = legacy_response([legacy_case(1), legacy_case(2), legacy_case(3)])
+    with tempfile.TemporaryDirectory() as tmp:
+      tmp = Path(tmp)
+      catalog = good_catalog()
+      res_path = write_json(tmp / "test-result-run-1.json", results)
+      _, manifest = conv.convert(catalog, "Service_Triage_Agent")
+      map_path = write_json(tmp / "map.json", manifest)
+      cat_path = write_json(tmp / "catalog.json", catalog)
+      rep_path = write_json(tmp / "resolve.json", {"agent": "Service_Triage_Agent",
+                                                   "version": "v3", "planner": "P"})
+      self.assertIsNone(checker.check(res_path, map_path, cat_path, "c", "v2", "run-1", "", rep_path))
+
   def test_failure_record_written_with_failing_exit(self):
     with tempfile.TemporaryDirectory() as tmp:
       tmp = Path(tmp)

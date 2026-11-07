@@ -24,6 +24,10 @@ verified against installed plugin sources:
 - agent-test-create: a path plus contents for the synced metadata.
 - preview-start: a sessionId plus the agent api name.
 - preview-send: a messages list plus the echoed session id.
+- agent-user-create: a userId plus username with empty permission errors
+  and all three platform permission sets assigned.
+- user-query: exactly one active user record with the expected profile.
+- assignment-query: permission set assignments covering expected names.
 - json: generic oclif envelope with top-level status zero.
 
 Usage: python3 scripts/verify_sf_output.py <subcommand> <file> [options]
@@ -290,6 +294,109 @@ def cmd_preview_send(args):
   return 0
 
 
+PLATFORM_AGENT_PERMSETS = (
+  "AgentforceServiceAgentBase",
+  "AgentforceServiceAgentUser",
+  "EinsteinGPTPromptTemplateUser",
+)
+
+
+def cmd_agent_user_create(args):
+  if len(args) != 1:
+    return fail("usage: agent-user-create <file>")
+  data = load(args[0])
+  if data is None:
+    return 1
+  result = unwrap(data)
+  if not isinstance(result, dict):
+    return fail("agent user output has no result object")
+  username = result.get("username", "")
+  user_id = result.get("userId", "")
+  if not username or not user_id:
+    return fail("agent user output lacks username or user id")
+  errors = result.get("permissionSetErrors")
+  if not isinstance(errors, list) or errors:
+    return fail("agent user permission errors: %s" % (errors or "missing error list"))
+  assigned = result.get("permissionSetsAssigned", [])
+  missing = [p for p in PLATFORM_AGENT_PERMSETS if p not in assigned]
+  if missing:
+    return fail("agent user lacks platform permission sets: " + ", ".join(missing))
+  print("agent-user username=%s id=%s" % (username, user_id))
+  return 0
+
+
+def cmd_user_query(args):
+  expect_username = None
+  expect_profile = None
+  rest = []
+  it = iter(args)
+  for arg in it:
+    if arg in ("--expect-username", "--expect-profile"):
+      try:
+        value = next(it)
+      except StopIteration:
+        return fail("user-query needs a value after " + arg)
+      if arg == "--expect-username":
+        expect_username = value
+      else:
+        expect_profile = value
+    else:
+      rest.append(arg)
+  if len(rest) != 1 or not expect_username or not expect_profile:
+    return fail("usage: user-query <file> --expect-username U --expect-profile P")
+  data = load(rest[0])
+  if data is None:
+    return 1
+  result = unwrap(data)
+  if not isinstance(result, dict) or not isinstance(result.get("records"), list):
+    return fail("user query output has no records list")
+  if result.get("totalSize") != 1 or len(result["records"]) != 1:
+    return fail("expected exactly one user %s, found %s" % (expect_username, result.get("totalSize")))
+  record = result["records"][0]
+  if not isinstance(record, dict) or record.get("Username") != expect_username:
+    return fail("user query returned an unexpected record")
+  if record.get("IsActive") is not True:
+    return fail("user %s is not active" % expect_username)
+  profile = record.get("Profile", {}) if isinstance(record.get("Profile"), dict) else {}
+  if profile.get("Name") != expect_profile:
+    return fail("user %s has profile %s, expected %s" % (
+      expect_username, profile.get("Name", "unknown"), expect_profile))
+  print("user-query id=%s username=%s" % (record.get("Id", "unknown"), expect_username))
+  return 0
+
+
+def cmd_assignment_query(args):
+  expected = []
+  rest = []
+  it = iter(args)
+  for arg in it:
+    if arg == "--expect":
+      try:
+        expected.append(next(it))
+      except StopIteration:
+        return fail("assignment-query needs a value after --expect")
+    else:
+      rest.append(arg)
+  if len(rest) != 1 or not expected:
+    return fail("usage: assignment-query <file> --expect NAME [--expect NAME...]")
+  data = load(rest[0])
+  if data is None:
+    return 1
+  result = unwrap(data)
+  if not isinstance(result, dict) or not isinstance(result.get("records"), list):
+    return fail("assignment query output has no records list")
+  found = set()
+  for record in result["records"]:
+    permset = record.get("PermissionSet", {}) if isinstance(record, dict) else {}
+    if isinstance(permset, dict) and permset.get("Name"):
+      found.add(permset["Name"])
+  missing = [name for name in expected if name not in found]
+  if missing:
+    return fail("missing permission set assignments: " + ", ".join(missing))
+  print("assignment-query found=%s" % ",".join(sorted(found)))
+  return 0
+
+
 def cmd_json(args):
   if len(args) != 1:
     return fail("usage: json <file>")
@@ -312,6 +419,9 @@ COMMANDS = {
   "agent-test-run": cmd_agent_test_run,
   "preview-start": cmd_preview_start,
   "preview-send": cmd_preview_send,
+  "agent-user-create": cmd_agent_user_create,
+  "user-query": cmd_user_query,
+  "assignment-query": cmd_assignment_query,
   "publish-diff": cmd_publish_diff,
   "json": cmd_json,
 }

@@ -25,20 +25,21 @@ Support requests arrive as free text. Someone must decide urgency and the right 
 4. No paid addons. v1 uses no external APIs.
 
 ## Setup (automated)
-1. Run DEV_HUB=my-hub bash scripts/setup-service-triage.sh with your Dev Hub alias. It creates a scratch org, deploys Apex plus permission sets, validates the authoring bundle, publishes a candidate agent version (inactive), assigns the permission set, and runs the Service Apex tests against installed code.
+1. Run DEV_HUB=my-hub bash scripts/setup-service-triage.sh with your Dev Hub alias. It creates a scratch org, deploys Apex plus permission sets, assigns the permission set to the admin, establishes the agent runtime user with the custom permission set, validates the authoring bundle, publishes a candidate agent version (inactive), and runs the Service Apex tests against installed code.
 2. To reuse an existing eligible dev org instead of creating a scratch org, run USE_EXISTING_ORG=1 ORG_ALIAS=my-dev-org bash scripts/setup-service-triage.sh. The org must be Agentforce enabled.
 3. Org creation is the one non idempotent step: it fails if the alias exists. Delete the old org or export a new ORG_ALIAS and rerun.
 4. Deploying metadata alone never creates a published executable agent version. Only sf agent publish creates the candidate version, and only sf agent activate makes a version live.
 
-## Agent user placeholder
-The committed .agent file holds an UPDATE_WITH_DEFAULT_AGENT_USER placeholder. Resolve it at publish time by exporting AGENT_USER with the agent runtime username, for example AGENT_USER=agent.user@example.com DEV_HUB=my-hub bash scripts/setup-service-triage.sh. The script swaps it for publish only and restores the placeholder so no org specific value is committed. Without AGENT_USER the script warns and publish may fail; set the default agent user in Agentforce Studio afterward instead. Never commit a real username.
+## Agent user and permissions
+The setup script establishes the agent runtime user before validation: it creates one with the supported CLI command, or verifies a username supplied through AGENT_USER for active status, the Einstein Agent User profile, and the platform permission sets AgentforceServiceAgentBase, AgentforceServiceAgentUser, and EinsteinGPTPromptTemplateUser. It then assigns the custom Foundry Service permission set to the runtime user. The org must offer the agent user profile with available licenses; creation fails early with guidance otherwise. Apex access alone is never sufficient.
+
+The committed .agent file holds an UPDATE_WITH_DEFAULT_AGENT_USER placeholder. The script resolves it to the established user for validation and publishing only, then restores the placeholder, so no org specific value is committed. Never commit a real username. If user setup fails, the script stops before validation; publishing never runs with a placeholder.
 
 ## Setup (manual, pending first run)
-1. Confirm the default agent user on Service_Triage_Agent in Agentforce Studio (or via AGENT_USER at publish time).
-2. Assign the Foundry Service permission set to that agent user.
-3. Activate a published agent version. Publishing leaves the version inactive by design.
-4. Preview one conversation in live mode using the fixture inputs in tests/fixtures/service-triage-inputs.json, or run the scripted sequences with ORG_ALIAS=my-org bash scripts/preview-service-triage-turns.sh and keep the transcripts.
-5. Run ORG_ALIAS=my-org AGENT_VERSION=<N> RUN_TEST=1 bash scripts/create-service-triage-test.sh to convert scenarios, resolve names, create the test, run it, and score results. Record the json results plus the candidate commit and agent version.
+1. Run the setup script so the runtime user exists with the custom permission set assigned.
+2. Activate a published agent version. Publishing leaves the version inactive by design.
+3. Preview one conversation in live mode using the fixture inputs in tests/fixtures/service-triage-inputs.json, or run the scripted sequences with ORG_ALIAS=my-org bash scripts/preview-service-triage-turns.sh and keep the transcripts. Published mode previews the activated agent; bundle modes preview the draft with live or simulated actions.
+4. Run ORG_ALIAS=my-org AGENT_VERSION=<N> RUN_TEST=1 bash scripts/create-service-triage-test.sh to convert scenarios, resolve names against that candidate version only, create the test, run it, and score results. Record the json results plus the candidate commit, agent version, and run id.
 
 ## Multi-turn coverage
 Seeded conversation history in converted specs tests the next agent response in supplied context; it does not prove the agent produced the earlier turns. For real multi-turn proof, run the sequential preview script above, which sends each utterance in order through one session and keeps the transcript. Substring smoke checks there are signals, not semantic proof.
@@ -67,10 +68,11 @@ Agent: I can triage this once I know more. What is the issue, and who or what is
 
 ## Troubleshooting
 1. Scratch create fails on alias: delete the old org or use a fresh ORG_ALIAS.
-2. Validation or publish fails on the agent bundle: confirm the scratch definition includes the agent platform settings from config/project-scratch-def.json, then read the compiler error location in the json output.
-3. Publish fails on the agent user: rerun with AGENT_USER set to a real username, or set the default agent user in Studio.
+2. Agent user setup fails: read the step output. Missing profile or exhausted licenses mean the org lacks Agentforce user provisioning. A supplied AGENT_USER must be active with the Einstein Agent User profile and platform permission sets.
+3. Validation or publish fails on the agent bundle: confirm the scratch definition includes the agent platform settings from config/project-scratch-def.json, then read the compiler error location in the json output.
 4. Apex tests fail: run the single class with junit output and read the first failing assertion.
-5. Agent preview shows no action: confirm the permission set assignment plus agent activation, then retry.
+5. Agent preview shows no action: confirm the custom permission set on the runtime user plus agent activation, then retry.
+6. Resolver fails on a name: confirm the selected agent version exists and its planner references the expected topic or action. Names from another agent or version are rejected by design.
 
 ## Cleanup
 Delete the scratch org when finished so the trial allocation is released.
