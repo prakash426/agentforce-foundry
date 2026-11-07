@@ -201,6 +201,14 @@ class ValidatorNegativeTest(unittest.TestCase):
       self.assertFalse(out["ok"])
       self.assertTrue(any("missing path" in e for e in out["errors"]))
 
+  def test_docs_generated_paths_allowed(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      root = write_fixture(tmp, "README.md",
+                           "Writes tests/eval/results/service-triage-audit.json and specs/x.yaml.\n")
+      name, ok, _ = v.check_docs_consistency(root)
+      self.assertEqual("docs-consistency", name)
+      self.assertTrue(ok)
+
   def test_exit_code_nonzero_on_bad_fixture(self):
     with tempfile.TemporaryDirectory() as tmp:
       env = dict(__import__("os").environ, FOUNDRY_ROOT=tmp)

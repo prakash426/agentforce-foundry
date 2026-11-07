@@ -240,7 +240,7 @@ def check_docs_consistency(root):
     for match in re.findall(r"(?:scripts|tests|force-app|manifests|config|specs)/[A-Za-z0-9_./-]+\.(?:sh|py|json|xml|cls|agent|yaml|md)", path.read_text()):
       refs.add(match.rstrip(".,)"))
   for ref in sorted(refs):
-    if ref.startswith("specs/"):
+    if ref.startswith(("specs/", "tests/eval/results/")):
       continue
     if not (root / ref).exists():
       problems.append("docs reference missing path " + ref)
