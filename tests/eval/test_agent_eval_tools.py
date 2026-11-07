@@ -125,83 +125,253 @@ class ConverterNegativeTest(unittest.TestCase):
     self.assertIsNone(conv.convert(data, "S"))
 
 
+def legacy_expectation(name, verdict):
+  entry = {"name": name, "actualValue": "actual " + name,
+           "expectedValue": "expected " + name,
+           "metricLabel": "Accuracy", "metricExplainability": "",
+           "startTime": "2026-11-06T00:00:00Z", "endTime": "2026-11-06T00:00:01Z"}
+  if verdict == "PASS":
+    entry.update({"result": "PASS", "score": 1, "status": "COMPLETED"})
+  elif verdict == "FAILURE":
+    entry.update({"result": "FAILURE", "score": 0, "status": "COMPLETED",
+                  "errorMessage": name + " did not match"})
+  else:
+    entry.update({"result": None, "score": 0, "status": "IN_PROGRESS"})
+  return entry
+
+
+def legacy_case(number, topic="PASS", action="PASS", outcome="PASS", status="COMPLETED"):
+  return {
+    "testNumber": number,
+    "status": status,
+    "startTime": "2026-11-06T00:00:00Z",
+    "endTime": "2026-11-06T00:00:05Z",
+    "inputs": {"utterance": "fixture utterance %d" % number},
+    "generatedData": {"actionsSequence": ["triage_service_case"],
+                      "invokedActions": "{}", "sessionId": "sess-%d" % number,
+                      "outcome": "fixture outcome", "topic": "triage_case"},
+    "testResults": [legacy_expectation("topic_assertion", topic),
+                    legacy_expectation("actions_assertion", action),
+                    legacy_expectation("output_validation", outcome)],
+  }
+
+
+def legacy_response(cases, status="COMPLETED", subject="Service_Triage_Agent"):
+  return {"status": status, "startTime": "2026-11-06T00:00:00Z",
+          "endTime": "2026-11-06T00:01:00Z",
+          "subjectName": subject, "testCases": cases}
+
+
 class CheckerTest(unittest.TestCase):
-  def run_checker(self, results, commit="abc123", version="v2"):
+  def run_checker(self, results, commit="abc123", version="v2", run_id="run-1",
+                  catalog=None, file_name="test-result-run-1.json"):
     with tempfile.TemporaryDirectory() as tmp:
       tmp = Path(tmp)
-      catalog = good_catalog()
-      res_path = write_json(tmp / "results.json", results)
-      spec, manifest = conv.convert(catalog, "Service_Triage_Agent")
+      catalog = catalog if catalog is not None else good_catalog()
+      res_path = write_json(tmp / file_name, results)
+      converted = conv.convert(catalog, "Service_Triage_Agent")
+      self.assertIsNotNone(converted)
+      _, manifest = converted
       map_path = write_json(tmp / "map.json", manifest)
       cat_path = write_json(tmp / "catalog.json", catalog)
-      out_path = tmp / "eval.json"
-      record = checker.check(res_path, map_path, cat_path, commit, version, "run-1")
-      return record
+      return checker.check(res_path, map_path, cat_path, commit, version, run_id)
 
   def test_all_pass_ok(self):
-    results = {"runId": "run-1", "subjectName": "Service_Triage_Agent", "testCases": [
-      {"testNumber": 1, "status": "PASS"},
-      {"testNumber": 2, "status": "PASS"},
-      {"testNumber": 3, "status": "PASS"},
-    ]}
+    results = legacy_response([legacy_case(1), legacy_case(2), legacy_case(3)])
     record = self.run_checker(results)
     self.assertIsNotNone(record)
     self.assertTrue(record["ok"])
     self.assertEqual("abc123", record["candidate_commit"])
     self.assertEqual("v2", record["agent_version"])
+    self.assertEqual("run-1", record["run_id"])
     self.assertEqual(["n1", "a1", "f1"], [c["scenario_id"] for c in record["cases"]])
+    self.assertEqual(3, record["summary"]["required"])
 
-  def test_failed_case_not_ok(self):
-    results = {"runId": "run-1", "testCases": [
-      {"testNumber": 1, "status": "PASS"},
-      {"testNumber": 2, "status": "FAIL", "message": "wrong topic"},
-      {"testNumber": 3, "status": "PASS"},
-    ]}
+  def test_empty_results_rejected(self):
+    results = legacy_response([])
+    self.assertIsNone(self.run_checker(results))
+
+  def test_partial_results_rejected(self):
+    results = legacy_response([legacy_case(1)])
+    self.assertIsNone(self.run_checker(results))
+
+  def test_duplicate_test_number_rejected(self):
+    results = legacy_response([legacy_case(1), legacy_case(2), legacy_case(2)])
+    self.assertIsNone(self.run_checker(results))
+
+  def test_unexpected_test_number_rejected(self):
+    results = legacy_response([legacy_case(1), legacy_case(2), legacy_case(99)])
+    self.assertIsNone(self.run_checker(results))
+
+  def test_in_progress_run_rejected(self):
+    results = legacy_response([legacy_case(1)], status="IN_PROGRESS")
+    self.assertIsNone(self.run_checker(results))
+
+  def test_error_run_rejected(self):
+    results = legacy_response([legacy_case(1)], status="ERROR")
+    self.assertIsNone(self.run_checker(results))
+
+  def test_subject_mismatch_rejected(self):
+    results = legacy_response([legacy_case(1), legacy_case(2), legacy_case(3)],
+                              subject="Other_Agent")
+    self.assertIsNone(self.run_checker(results))
+
+  def test_run_id_mismatch_rejected(self):
+    results = legacy_response([legacy_case(1), legacy_case(2), legacy_case(3)])
+    self.assertIsNone(self.run_checker(results, run_id="run-9"))
+
+  def test_contradictory_scorers_fail_case(self):
+    bad = legacy_case(2, topic="PASS", action="FAILURE", outcome="PASS")
+    results = legacy_response([legacy_case(1), bad, legacy_case(3)])
     record = self.run_checker(results)
     self.assertIsNotNone(record)
     self.assertFalse(record["ok"])
+    self.assertEqual("FAIL", record["cases"][1]["status"])
     self.assertTrue(any("ambiguous" in f for f in record["threshold_failures"]))
 
-  def test_error_status_not_ok(self):
-    results = {"runId": "run-1", "testCases": [
-      {"testNumber": 1, "status": "ERROR"},
-      {"testNumber": 2, "status": "PASS"},
-      {"testNumber": 3, "status": "PASS"},
-    ]}
+  def test_null_verdict_is_unfinished(self):
+    bad = legacy_case(1, topic="PASS", action=None, outcome="PASS")
+    results = legacy_response([bad, legacy_case(2), legacy_case(3)])
+    record = self.run_checker(results)
+    self.assertIsNotNone(record)
+    self.assertFalse(record["ok"])
+    self.assertEqual("UNFINISHED", record["cases"][0]["status"])
+
+  def test_error_case_not_ok(self):
+    bad = legacy_case(1, status="ERROR")
+    results = legacy_response([bad, legacy_case(2), legacy_case(3)])
     record = self.run_checker(results)
     self.assertIsNotNone(record)
     self.assertFalse(record["ok"])
     self.assertEqual(1, record["summary"]["errors"])
 
+  def test_missing_expectation_group_unfinished(self):
+    bad = legacy_case(1)
+    bad["testResults"] = [e for e in bad["testResults"] if e["name"] != "output_validation"]
+    results = legacy_response([bad, legacy_case(2), legacy_case(3)])
+    record = self.run_checker(results)
+    self.assertIsNotNone(record)
+    self.assertFalse(record["ok"])
+    self.assertEqual("UNFINISHED", record["cases"][0]["status"])
+
   def test_normal_threshold_enforced(self):
-    results = {"runId": "run-1", "testCases": [
-      {"testNumber": 1, "status": "FAIL"},
-      {"testNumber": 2, "status": "PASS"},
-      {"testNumber": 3, "status": "PASS"},
-    ]}
+    bad = legacy_case(1, topic="FAILURE")
+    results = legacy_response([bad, legacy_case(2), legacy_case(3)])
     record = self.run_checker(results)
     self.assertIsNotNone(record)
     self.assertFalse(record["ok"])
     self.assertTrue(any("normal" in f for f in record["threshold_failures"]))
 
   def test_missing_commit_fails(self):
-    results = {"runId": "run-1", "testCases": [{"testNumber": 1, "status": "PASS"}]}
+    results = legacy_response([legacy_case(1)])
     self.assertIsNone(self.run_checker(results, commit=""))
-
-  def test_unmapped_test_number_fails(self):
-    results = {"runId": "run-1", "testCases": [{"testNumber": 99, "status": "PASS"}]}
-    self.assertIsNone(self.run_checker(results))
 
   def test_malformed_results_fail(self):
     with tempfile.TemporaryDirectory() as tmp:
       tmp = Path(tmp)
-      bad = tmp / "results.json"
+      bad = tmp / "test-result-run-1.json"
       bad.write_text("{oops")
       catalog = good_catalog()
       _, manifest = conv.convert(catalog, "S")
       map_path = write_json(tmp / "map.json", manifest)
       cat_path = write_json(tmp / "catalog.json", catalog)
-      self.assertIsNone(checker.check(bad, map_path, cat_path, "c", "v", ""))
+      self.assertIsNone(checker.check(bad, map_path, cat_path, "c", "v", "run-1"))
+
+  def test_nonlegacy_shape_rejected(self):
+    results = {"testCases": [{"testNumber": 1, "status": "PASS"}]}
+    self.assertIsNone(self.run_checker(results))
+
+  def test_committed_sample_fixture_scores(self):
+    catalog = good_catalog()
+    catalog["scenarios"] = catalog["scenarios"][:2]
+    sample = json.loads((ROOT / "tests" / "fixtures" / "agent-test-results-legacy-sample.json").read_text())
+    with tempfile.TemporaryDirectory() as tmp:
+      tmp = Path(tmp)
+      res_path = write_json(tmp / "test-result-sample.json", sample)
+      _, manifest = conv.convert(catalog, "Service_Triage_Agent")
+      map_path = write_json(tmp / "map.json", manifest)
+      cat_path = write_json(tmp / "catalog.json", catalog)
+      record = checker.check(res_path, map_path, cat_path, "c", "v", "sample")
+      self.assertIsNotNone(record)
+      self.assertTrue(record["ok"])
+      self.assertEqual(2, record["summary"]["total"])
+
+  def test_merge_commit_flagged(self):
+    results = legacy_response([legacy_case(1), legacy_case(2), legacy_case(3)])
+    with tempfile.TemporaryDirectory() as tmp:
+      tmp = Path(tmp)
+      catalog = good_catalog()
+      res_path = write_json(tmp / "test-result-run-1.json", results)
+      _, manifest = conv.convert(catalog, "Service_Triage_Agent")
+      map_path = write_json(tmp / "map.json", manifest)
+      cat_path = write_json(tmp / "catalog.json", catalog)
+      record = checker.check(res_path, map_path, cat_path, "merge-sha", "v", "run-1", "head-sha")
+      self.assertIsNotNone(record)
+      self.assertTrue(record["tested_merge_commit"])
+      self.assertEqual("head-sha", record["pr_head"])
+      direct = checker.check(res_path, map_path, cat_path, "same-sha", "v", "run-1", "same-sha")
+      self.assertFalse(direct["tested_merge_commit"])
+
+  def test_failure_record_written_with_failing_exit(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      tmp = Path(tmp)
+      catalog = good_catalog()
+      res_path = write_json(tmp / "test-result-run-1.json", legacy_response([]))
+      _, manifest = conv.convert(catalog, "Service_Triage_Agent")
+      map_path = write_json(tmp / "map.json", manifest)
+      cat_path = write_json(tmp / "catalog.json", catalog)
+      out_path = tmp / "eval.json"
+      code = checker.main(["--results", str(res_path), "--map", str(map_path),
+                           "--catalog", str(cat_path), "--commit", "c",
+                           "--agent-version", "v", "--run-id", "run-1",
+                           "--out", str(out_path)])
+      self.assertEqual(1, code)
+      record = json.loads(out_path.read_text())
+      self.assertFalse(record["ok"])
+      self.assertTrue(record["errors"])
+
+
+class MappingConsistencyTest(unittest.TestCase):
+  def check_with(self, mapping, catalog):
+    with tempfile.TemporaryDirectory() as tmp:
+      tmp = Path(tmp)
+      res_path = write_json(tmp / "test-result-run-1.json",
+                            legacy_response([legacy_case(1), legacy_case(2), legacy_case(3)]))
+      map_path = write_json(tmp / "map.json", mapping)
+      cat_path = write_json(tmp / "catalog.json", catalog)
+      return checker.check(res_path, map_path, cat_path, "c", "v", "run-1")
+
+  def test_absent_category_rejected(self):
+    catalog = good_catalog()
+    catalog["scenarios"].append(
+      {"id": "e1", "category": "escalation", "input": "Talk to a human",
+       "apex_outcome": "SUGGESTED", "apex_priority": "High",
+       "apex_queue": "Critical_Response", "agent_expect": "escalate", "notes": "n"})
+    _, manifest = conv.convert(good_catalog(), "Service_Triage_Agent")
+    self.assertIsNone(self.check_with(manifest, catalog))
+
+  def test_duplicate_scenario_rejected(self):
+    _, manifest = conv.convert(good_catalog(), "Service_Triage_Agent")
+    manifest["cases"][1]["scenario_id"] = "n1"
+    self.assertIsNone(self.check_with(manifest, good_catalog()))
+
+  def test_unknown_scenario_rejected(self):
+    _, manifest = conv.convert(good_catalog(), "Service_Triage_Agent")
+    manifest["cases"][0]["scenario_id"] = "ghost"
+    self.assertIsNone(self.check_with(manifest, good_catalog()))
+
+  def test_field_mismatch_rejected(self):
+    _, manifest = conv.convert(good_catalog(), "Service_Triage_Agent")
+    manifest["cases"][0]["category"] = "escalation"
+    self.assertIsNone(self.check_with(manifest, good_catalog()))
+
+  def test_version_mismatch_rejected(self):
+    _, manifest = conv.convert(good_catalog(), "Service_Triage_Agent")
+    manifest["catalog_version"] = 99
+    self.assertIsNone(self.check_with(manifest, good_catalog()))
+
+  def test_empty_mapping_rejected(self):
+    self.assertIsNone(self.check_with({"cases": []}, good_catalog()))
 
 
 if __name__ == "__main__":

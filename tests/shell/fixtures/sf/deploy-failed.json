@@ -1,0 +1,12 @@
+{
+  "status": 0,
+  "result": {
+    "id": "0Af000000000003",
+    "status": "Failed",
+    "success": false,
+    "done": true,
+    "checkOnly": true,
+    "numberComponentErrors": 1
+  },
+  "warnings": []
+}

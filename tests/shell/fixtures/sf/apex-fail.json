@@ -1,0 +1,25 @@
+{
+  "status": 0,
+  "result": {
+    "summary": {
+      "outcome": "Failed",
+      "testsRan": 25,
+      "passing": 24,
+      "failing": 1,
+      "skipped": 0,
+      "testRunId": "707000000000002",
+      "passRate": "96%"
+    },
+    "tests": [
+      {
+        "fullName": "ServiceTriageActionTest.m1",
+        "outcome": "Pass"
+      },
+      {
+        "fullName": "ServiceTriageActionTest.m2",
+        "outcome": "Fail"
+      }
+    ]
+  },
+  "warnings": []
+}

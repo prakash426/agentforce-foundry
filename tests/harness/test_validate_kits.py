@@ -56,7 +56,7 @@ class ValidatorShapeTest(unittest.TestCase):
     self.assertIn("checks", out)
     self.assertIn("ok", out)
     self.assertIn("errors", out)
-    self.assertEqual(6, len(out["checks"]))
+    self.assertEqual(8, len(out["checks"]))
 
   def test_real_repo_passes(self):
     out = v.run()
@@ -178,6 +178,28 @@ class ValidatorNegativeTest(unittest.TestCase):
       out = v.run(root)
       self.assertFalse(out["ok"])
       self.assertTrue(any("escalate" in e for e in out["errors"]))
+
+  def test_sh_shebang_script_fails(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      root = write_fixture(tmp, "scripts/setup-service-triage.sh",
+                           "#!/bin/sh\nset -e\nsf org display | tee out.txt\n")
+      out = v.run(root)
+      self.assertFalse(out["ok"])
+      self.assertTrue(any(e.startswith("shell-scripts:") for e in out["errors"]))
+
+  def test_docs_sh_invocation_fails(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      root = write_fixture(tmp, "README.md", "Run sh scripts/setup.sh today.\n")
+      out = v.run(root)
+      self.assertFalse(out["ok"])
+      self.assertTrue(any("bash" in e for e in out["errors"]))
+
+  def test_docs_missing_path_fails(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      root = write_fixture(tmp, "README.md", "See scripts/does-not-exist.sh for details.\n")
+      out = v.run(root)
+      self.assertFalse(out["ok"])
+      self.assertTrue(any("missing path" in e for e in out["errors"]))
 
   def test_exit_code_nonzero_on_bad_fixture(self):
     with tempfile.TemporaryDirectory() as tmp:

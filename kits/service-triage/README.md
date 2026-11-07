@@ -25,20 +25,23 @@ Support requests arrive as free text. Someone must decide urgency and the right 
 4. No paid addons. v1 uses no external APIs.
 
 ## Setup (automated)
-1. Run DEV_HUB=my-hub sh scripts/setup-service-triage.sh with your Dev Hub alias. It creates a scratch org, deploys Apex plus permission sets, validates the authoring bundle, publishes a candidate agent version (inactive), assigns the permission set, and runs the Service Apex tests against installed code.
-2. To reuse an existing eligible dev org instead of creating a scratch org, run USE_EXISTING_ORG=1 ORG_ALIAS=my-dev-org sh scripts/setup-service-triage.sh. The org must be Agentforce enabled.
+1. Run DEV_HUB=my-hub bash scripts/setup-service-triage.sh with your Dev Hub alias. It creates a scratch org, deploys Apex plus permission sets, validates the authoring bundle, publishes a candidate agent version (inactive), assigns the permission set, and runs the Service Apex tests against installed code.
+2. To reuse an existing eligible dev org instead of creating a scratch org, run USE_EXISTING_ORG=1 ORG_ALIAS=my-dev-org bash scripts/setup-service-triage.sh. The org must be Agentforce enabled.
 3. Org creation is the one non idempotent step: it fails if the alias exists. Delete the old org or export a new ORG_ALIAS and rerun.
 4. Deploying metadata alone never creates a published executable agent version. Only sf agent publish creates the candidate version, and only sf agent activate makes a version live.
 
 ## Agent user placeholder
-The committed .agent file holds an UPDATE_WITH_DEFAULT_AGENT_USER placeholder. Resolve it at publish time by exporting AGENT_USER with the agent runtime username, for example AGENT_USER=agent.user@example.com DEV_HUB=my-hub sh scripts/setup-service-triage.sh. The script swaps it for publish only and restores the placeholder so no org specific value is committed. Without AGENT_USER the script warns and publish may fail; set the default agent user in Agentforce Studio afterward instead. Never commit a real username.
+The committed .agent file holds an UPDATE_WITH_DEFAULT_AGENT_USER placeholder. Resolve it at publish time by exporting AGENT_USER with the agent runtime username, for example AGENT_USER=agent.user@example.com DEV_HUB=my-hub bash scripts/setup-service-triage.sh. The script swaps it for publish only and restores the placeholder so no org specific value is committed. Without AGENT_USER the script warns and publish may fail; set the default agent user in Agentforce Studio afterward instead. Never commit a real username.
 
 ## Setup (manual, pending first run)
 1. Confirm the default agent user on Service_Triage_Agent in Agentforce Studio (or via AGENT_USER at publish time).
 2. Assign the Foundry Service permission set to that agent user.
 3. Activate a published agent version. Publishing leaves the version inactive by design.
-4. Preview one conversation in live mode using the fixture inputs in tests/fixtures/service-triage-inputs.json.
-5. Convert the committed scenarios with python3 tests/eval/convert_service_scenarios.py, create the test with sf agent test create, and run it with sf agent test run. Record the json results plus the candidate commit and agent version.
+4. Preview one conversation in live mode using the fixture inputs in tests/fixtures/service-triage-inputs.json, or run the scripted sequences with ORG_ALIAS=my-org bash scripts/preview-service-triage-turns.sh and keep the transcripts.
+5. Run ORG_ALIAS=my-org AGENT_VERSION=<N> RUN_TEST=1 bash scripts/create-service-triage-test.sh to convert scenarios, resolve names, create the test, run it, and score results. Record the json results plus the candidate commit and agent version.
+
+## Multi-turn coverage
+Seeded conversation history in converted specs tests the next agent response in supplied context; it does not prove the agent produced the earlier turns. For real multi-turn proof, run the sequential preview script above, which sends each utterance in order through one session and keeps the transcript. Substring smoke checks there are signals, not semantic proof.
 
 ## Example conversations (illustrative until executed)
 User: Checkout is down everywhere, registers frozen since 9am.
@@ -51,8 +54,8 @@ User: Help.
 Agent: I can triage this once I know more. What is the issue, and who or what is affected.
 
 ## Verification
-1. Offline: run the python3 commands in docs/TESTING.md. All must pass with exit zero.
-2. Org: rerun the Apex tests against installed code and confirm coverage, then run the agent test from converted scenarios and keep the results file with commit and version.
+1. Offline: run the seven python3 check commands in the main README quickstart. All must pass with exit zero.
+2. Org: rerun the Apex tests against installed code and confirm coverage, then run the agent test from the resolved spec and keep the scored evaluation record with commit, version, and run id.
 3. Truthfulness: confirm the agent says suggested and recommend human follow up where needed. It never says routed, assigned, saved, transferred, handed off, or escalated as a completed action in v1.
 
 ## Limitations

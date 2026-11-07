@@ -14,12 +14,13 @@ Conversation → triage_case → off_topic → polite redirect
 Conversation → triage_router → escalation or off_topic directly for explicit human requests and non support chat
 
 ## Components
-1. Service_Triage_Agent.agent: Agent Script blueprint modeled on the official Local Info Agent sample. Holds system rules, router, five subagents, and the action binding to apex://ServiceTriageAction with input and output mappings.
-2. ServiceTriageAction.cls: deterministic classifier. Word based severity signals, negation handling, conflict detection, documented input limits, stable outcome codes. No queries, no DML.
+1. Service_Triage_Agent.agent: Agent Script blueprint modeled on the official Local Info Agent sample. Holds system rules, router, five subagents with transitions, and the action binding to apex://ServiceTriageAction with input and output mappings.
+2. ServiceTriageAction.cls: deterministic classifier. Word based severity signals, clause scoped negation with contraction handling, conflict and uncertainty detection, documented input limits, stable outcome codes. No queries, no DML.
 3. Agentforce_Foundry_Service permission set: grants Apex class access for the agent runtime user.
-4. Scenario catalog: twelve Service scenarios across normal, ambiguous, adversarial, out of scope, and escalation classes with expected Apex outcomes and expected agent behavior.
+4. Scenario catalog: seventeen Service scenarios across normal, ambiguous, adversarial, out of scope, and escalation classes with expected Apex outcomes, expected agent behavior, and five multi-turn flows.
 5. Offline harness: static validator plus scenario audit runner plus unit checks. Runs with no org.
-6. Deploy path: scratch definition modeled on the official agent template, setup scripts, and CI workflows.
+6. Eval toolchain: scenario converter, metadata resolver, result checker with thresholds, CLI output verifier, and mocked script failure tests. All run with no org.
+7. Deploy path: scratch definition modeled on the official agent template, verified setup scripts, sequential preview runner, and CI workflows.
 
 ## Why no Flow
 v1 takes no record actions and needs no branching or orchestration beyond one Apex call, so a Flow would be decorative. Human follow up recommendations and clarification are conversational behaviors owned by the agent script. If a later version writes records or branches across objects, a Flow action becomes the right tool and will be added with tests.
@@ -41,4 +42,5 @@ Customer text is treated as data. The agent script carries explicit disregard ov
 3. Official DX sample project layout: https://api.github.com/repos/forcedotcom/afdx-pro-code-testdrive/contents/force-app/main/default
 4. Salesforce Testing Center update (Studio move, conversation testing, custom evals): https://www.salesforce.com/blog/agentforce-testing-center/?bc=OTH
 5. Trailhead agent testing unit (batch testing): https://trailhead.salesforce.com/content/learn/modules/agentforce-agent-testing/trust-your-agents
-6. Installed Salesforce CLI 2.145.6 help text for agent, org, project deploy, and apex test commands (verified locally, no org needed).
+6. Installed Salesforce CLI help text for agent, org, project deploy, and apex test commands (verified locally, no org needed).
+7. Installed plugin sources: agent plugin plus agents library for test spec, result, and scorer shapes; apex plugin plus apex-node for test summary and async behavior; source-deploy-retrieve for deploy status types.

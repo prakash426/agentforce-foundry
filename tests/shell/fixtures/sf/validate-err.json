@@ -1,0 +1,10 @@
+{
+  "status": 0,
+  "result": {
+    "success": false,
+    "errors": [
+      "line 3: unknown topic"
+    ]
+  },
+  "warnings": []
+}

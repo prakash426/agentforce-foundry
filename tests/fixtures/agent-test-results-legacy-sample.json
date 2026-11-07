@@ -1,0 +1,121 @@
+{
+  "status": "COMPLETED",
+  "startTime": "2026-11-06T00:00:00Z",
+  "endTime": "2026-11-06T00:01:00Z",
+  "subjectName": "Service_Triage_Agent",
+  "testCases": [
+    {
+      "testNumber": 1,
+      "status": "COMPLETED",
+      "startTime": "2026-11-06T00:00:00Z",
+      "endTime": "2026-11-06T00:00:05Z",
+      "inputs": {
+        "utterance": "fixture utterance 1"
+      },
+      "generatedData": {
+        "actionsSequence": [
+          "triage_service_case"
+        ],
+        "invokedActions": "{}",
+        "sessionId": "sess-1",
+        "outcome": "fixture outcome",
+        "topic": "triage_case"
+      },
+      "testResults": [
+        {
+          "name": "topic_assertion",
+          "actualValue": "actual topic_assertion",
+          "expectedValue": "expected topic_assertion",
+          "metricLabel": "Accuracy",
+          "metricExplainability": "",
+          "startTime": "2026-11-06T00:00:00Z",
+          "endTime": "2026-11-06T00:00:01Z",
+          "result": "PASS",
+          "score": 1,
+          "status": "COMPLETED"
+        },
+        {
+          "name": "actions_assertion",
+          "actualValue": "actual actions_assertion",
+          "expectedValue": "expected actions_assertion",
+          "metricLabel": "Accuracy",
+          "metricExplainability": "",
+          "startTime": "2026-11-06T00:00:00Z",
+          "endTime": "2026-11-06T00:00:01Z",
+          "result": "PASS",
+          "score": 1,
+          "status": "COMPLETED"
+        },
+        {
+          "name": "output_validation",
+          "actualValue": "actual output_validation",
+          "expectedValue": "expected output_validation",
+          "metricLabel": "Accuracy",
+          "metricExplainability": "",
+          "startTime": "2026-11-06T00:00:00Z",
+          "endTime": "2026-11-06T00:00:01Z",
+          "result": "PASS",
+          "score": 1,
+          "status": "COMPLETED"
+        }
+      ]
+    },
+    {
+      "testNumber": 2,
+      "status": "COMPLETED",
+      "startTime": "2026-11-06T00:00:00Z",
+      "endTime": "2026-11-06T00:00:05Z",
+      "inputs": {
+        "utterance": "fixture utterance 2"
+      },
+      "generatedData": {
+        "actionsSequence": [
+          "triage_service_case"
+        ],
+        "invokedActions": "{}",
+        "sessionId": "sess-2",
+        "outcome": "fixture outcome",
+        "topic": "triage_case"
+      },
+      "testResults": [
+        {
+          "name": "topic_assertion",
+          "actualValue": "actual topic_assertion",
+          "expectedValue": "expected topic_assertion",
+          "metricLabel": "Accuracy",
+          "metricExplainability": "",
+          "startTime": "2026-11-06T00:00:00Z",
+          "endTime": "2026-11-06T00:00:01Z",
+          "result": "PASS",
+          "score": 1,
+          "status": "COMPLETED"
+        },
+        {
+          "name": "actions_assertion",
+          "actualValue": "actual actions_assertion",
+          "expectedValue": "expected actions_assertion",
+          "metricLabel": "Accuracy",
+          "metricExplainability": "",
+          "startTime": "2026-11-06T00:00:00Z",
+          "endTime": "2026-11-06T00:00:01Z",
+          "result": "PASS",
+          "score": 1,
+          "status": "COMPLETED"
+        },
+        {
+          "name": "output_validation",
+          "actualValue": "actual output_validation",
+          "expectedValue": "expected output_validation",
+          "metricLabel": "Accuracy",
+          "metricExplainability": "",
+          "startTime": "2026-11-06T00:00:00Z",
+          "endTime": "2026-11-06T00:00:01Z",
+          "result": "PASS",
+          "score": 1,
+          "status": "COMPLETED"
+        }
+      ]
+    }
+  ],
+  "_provenance": "Sanitized fixture matching the AgentTestResultsResponse and TestCaseResult shapes verified against installed @salesforce/agents sources. Values are illustrative; structure mirrors the real CLI payload including per-expectation results."
+}

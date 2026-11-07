@@ -174,6 +174,81 @@ def check_agent_bundle(root):
   return ("agent-bundle", True, "agent script and bundle meta present with action binding and transitions")
 
 
+SHELL_SCRIPTS = [
+  "scripts/setup-service-triage.sh",
+  "scripts/setup.sh",
+  "scripts/create-service-triage-test.sh",
+  "scripts/preview-service-triage-turns.sh",
+]
+DOC_FILES = [
+  "README.md",
+  "docs/ARCHITECTURE.md",
+  "docs/TESTING.md",
+  "docs/EVIDENCE.md",
+  "kits/service-triage/README.md",
+  "kits/sales-qualification/README.md",
+  "kits/internal-help/README.md",
+]
+
+
+def check_shell_scripts(root):
+  problems = []
+  for rel in SHELL_SCRIPTS:
+    path = root / rel
+    if not path.exists():
+      problems.append("missing " + rel)
+      continue
+    text = path.read_text()
+    first = text.splitlines()[0] if text.splitlines() else ""
+    if "bash" not in first:
+      problems.append(rel + " must declare a bash shebang for pipefail support")
+    if "pipefail" not in text:
+      problems.append(rel + " must enable pipefail")
+    if "| tee" in text:
+      problems.append(rel + " must not pipe into tee without status handling")
+    if "verify_step" not in text:
+      problems.append(rel + " must verify Salesforce output payloads")
+    if "sf_steps.sh" not in text:
+      problems.append(rel + " must source the shared step helper")
+  lib = root / "scripts" / "lib" / "sf_steps.sh"
+  if not lib.exists():
+    problems.append("missing scripts/lib/sf_steps.sh")
+  elif "verify_sf_output.py" not in lib.read_text():
+    problems.append("shared step helper must call the output verifier")
+  if not (root / "scripts" / "verify_sf_output.py").exists():
+    problems.append("missing scripts/verify_sf_output.py")
+  if problems:
+    return ("shell-scripts", False, "; ".join(problems))
+  return ("shell-scripts", True, "%d org scripts use bash with verified steps" % len(SHELL_SCRIPTS))
+
+
+def check_docs_consistency(root):
+  problems = []
+  for rel in DOC_FILES:
+    path = root / rel
+    if not path.exists():
+      continue
+    text = path.read_text()
+    if "sh scripts/" in text.replace("bash scripts/", ""):
+      problems.append(rel + " still invokes scripts with sh instead of bash")
+  import re
+  refs = set()
+  for rel in DOC_FILES:
+    path = root / rel
+    if not path.exists():
+      continue
+    for match in re.findall(r"(?:scripts|tests|force-app|manifests|config|specs)/[A-Za-z0-9_./-]+\.(?:sh|py|json|xml|cls|agent|yaml|md)", path.read_text()):
+      refs.add(match.rstrip(".,)"))
+  for ref in sorted(refs):
+    if ref.startswith("specs/"):
+      continue
+    if not (root / ref).exists():
+      problems.append("docs reference missing path " + ref)
+  if problems:
+    return ("docs-consistency", False, "; ".join(problems))
+  return ("docs-consistency", True, "docs invoke bash and reference %d real paths" % len(refs))
+
+
 def run(root=None):
   root = Path(root) if root else DEFAULT_ROOT
   results = [
@@ -183,6 +258,8 @@ def run(root=None):
     check_apex_markers(root),
     check_permset_refs(root),
     check_agent_bundle(root),
+    check_shell_scripts(root),
+    check_docs_consistency(root),
   ]
   checks = [{"name": n, "ok": ok, "detail": d} for (n, ok, d) in results]
   errors = [c["name"] + ": " + c["detail"] for c in checks if not c["ok"]]

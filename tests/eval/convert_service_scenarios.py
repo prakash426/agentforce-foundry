@@ -11,17 +11,20 @@ become conversationHistory, which is the platform supported multi-turn
 path. No org needed. Exits nonzero when the catalog is invalid.
 
 Limitations, stated plainly:
-1. expectedTopic uses subagent developer names as initial values. After
-   publish, resolve them against retrieved GenAiPlugin DeveloperNames.
+1. expectedTopic uses subagent developer names as initial values. The
+   metadata resolver rewrites them against retrieved GenAiPlugin
+   developer names before test creation, failing on missing names.
 2. expectedActions uses the triage action name for run_triage and an
-   empty list otherwise. Resolve against GenAiFunction names after the
-   first publish if they differ.
+   empty list otherwise. The resolver verifies each action the same way.
 3. expectedOutcome is natural language. The platform cannot assert Apex
    outcome codes directly; Apex codes stay covered by Apex unit tests.
 4. customEvaluations ships empty. JSONPath evals need generated data
    from a first verbose run; add them manually afterward.
 5. Escalate means a written human follow up recommendation. V1 never
    transfers, so no handoff assertion is emitted.
+6. Seeded history tests the next response in context; it does not prove
+   the agent produced earlier turns. Use the sequential preview script
+   for real multi-turn proof with transcripts.
 """
 import json
 import os
