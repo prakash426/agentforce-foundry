@@ -1,0 +1,14 @@
+{
+  "status": 0,
+  "result": {
+    "messages": [
+      {
+        "role": "agent",
+        "message": "Suggested priority High."
+      }
+    ],
+    "agentApiName": "Service_Triage_Agent",
+    "sessionId": "sess-001"
+  },
+  "warnings": []
+}

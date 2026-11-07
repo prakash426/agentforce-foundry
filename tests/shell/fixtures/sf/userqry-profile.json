@@ -1,0 +1,18 @@
+{
+  "status": 0,
+  "result": {
+    "records": [
+      {
+        "Id": "005000000000004",
+        "Username": "agent@example.com",
+        "IsActive": true,
+        "Profile": {
+          "Name": "Standard User"
+        }
+      }
+    ],
+    "totalSize": 1,
+    "done": true
+  },
+  "warnings": []
+}

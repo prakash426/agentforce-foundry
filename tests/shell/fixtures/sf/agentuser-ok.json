@@ -1,0 +1,15 @@
+{
+  "status": 0,
+  "result": {
+    "userId": "005000000000001",
+    "username": "agent.user.abc123@example.com",
+    "profileId": "00e000000000001",
+    "permissionSetsAssigned": [
+      "AgentforceServiceAgentBase",
+      "AgentforceServiceAgentUser",
+      "EinsteinGPTPromptTemplateUser"
+    ],
+    "permissionSetErrors": []
+  },
+  "warnings": []
+}
