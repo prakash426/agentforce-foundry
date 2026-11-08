@@ -4,6 +4,18 @@
 # SF_FAIL_AT (comma list of step keys that fail), SF_APEX_MODE,
 # SF_RUN_MODE (alternate canned outputs for async simulation).
 set -uo pipefail
+# Capability probes ("--help") answer before logging: the log records
+# lifecycle steps only, so ordering assertions stay meaningful.
+case "$*" in
+  *"--help"*)
+    if [ "${SF_NO_AGENT_CMDS:-0}" = "1" ]; then
+      case "$1 $2" in
+        "agent validate"|"agent publish"|"agent activate"|"agent preview")
+          echo "fake sf: no such command" >&2; exit 2;;
+      esac
+    fi
+    exit 0;;
+esac
 echo "sf $*" >> "${SF_LOG:?}"
 key=""
 out=""
@@ -77,6 +89,9 @@ esac
 case ",${SF_FAIL_AT:-}," in
   *",$key,"*) echo "injected failure at $key"; exit 1;;
 esac
+if [ -n "${SF_STDERR_WARN:-}" ]; then
+  echo "$SF_STDERR_WARN" >&2
+fi
 if [ "$key" = "publish" ]; then
   mkdir -p "force-app/main/default/bots/Service_Triage_Agent"
   echo "<BotVersion/>" > "force-app/main/default/bots/Service_Triage_Agent/v3.botVersion-meta.xml"

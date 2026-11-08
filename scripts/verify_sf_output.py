@@ -44,10 +44,26 @@ def fail(msg):
 
 def load(path):
   try:
-    return json.loads(Path(path).read_text())
+    text = Path(path).read_text()
   except Exception as exc:
     print("verify error: cannot parse %s: %s" % (path, exc), file=sys.stderr)
     return None
+  try:
+    return json.loads(text)
+  except Exception as first_exc:
+    pass
+  # The CLI prints warnings (update notices, auth hints) ahead of its
+  # JSON document when streams are merged. Accept a leading preamble so
+  # a warning never fails verification, but keep trailing garbage a
+  # failure: only the document from its first brace may parse.
+  start = text.find("{")
+  if start > 0:
+    try:
+      return json.loads(text[start:])
+    except Exception:
+      pass
+  print("verify error: cannot parse %s: %s" % (path, first_exc), file=sys.stderr)
+  return None
 
 
 def unwrap(data):

@@ -47,6 +47,9 @@ restore_agent_file() {
 }
 trap restore_agent_file EXIT INT TERM
 
+echo "Step 0 of 8: confirm the CLI ships the agent lifecycle commands"
+require_sf_commands "agent validate authoring-bundle" "agent publish authoring-bundle" "agent activate"
+
 if [ "${USE_EXISTING_ORG:-0}" = "1" ]; then
   echo "Step 1 of 8: using existing org $ALIAS (no scratch create)"
   run_step "show org $ALIAS" "org-display-$ALIAS.json" sf org display -o "$ALIAS" --json

@@ -187,6 +187,42 @@ class AgentUserVerifyTest(unittest.TestCase):
     self.assertIn("AgentforceServiceAgentUser", err)
 
 
+class CliNoiseTest(unittest.TestCase):
+  WARN = " \u203a   Warning: @salesforce/cli update available from \u001b[92m2.145.6\u001b[39m to \u001b[92m2.157.8\u001b[39m.\n"
+
+  def test_leading_warning_preamble_accepted(self):
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+      noisy = Path(tmp) / "org-warn.json"
+      noisy.write_text(self.WARN + (FIX / "org-ok.json").read_text())
+      code, out, _ = run("json", str(noisy))
+      self.assertEqual(0, code)
+      self.assertIn("status=0", out)
+
+  def test_leading_warning_preamble_accepted_for_apex(self):
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+      noisy = Path(tmp) / "apex-warn.json"
+      noisy.write_text(self.WARN + (FIX / "apex-ok.json").read_text())
+      code, out, _ = run("apex", str(noisy))
+      self.assertEqual(0, code)
+      self.assertIn("707000000000001", out)
+
+  def test_pure_garbage_rejected(self):
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+      bad = Path(tmp) / "bad.json"
+      bad.write_text("injected failure at deploy\n")
+      self.assertEqual(1, run("json", str(bad))[0])
+
+  def test_trailing_garbage_rejected(self):
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+      bad = Path(tmp) / "trailing.json"
+      bad.write_text((FIX / "org-ok.json").read_text() + "\nunexpected trailer\n")
+      self.assertEqual(1, run("json", str(bad))[0])
+
+
 class PublishDiffTest(unittest.TestCase):
   def test_single_new_version(self):
     import tempfile

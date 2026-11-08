@@ -43,6 +43,8 @@ case "$ACTIONS" in
   *) echo "ACTIONS must be live or simulate, got: $ACTIONS" >&2; exit 1;;
 esac
 
+require_sf_commands "agent preview start"
+
 START_IDENTITY=()
 SEND_IDENTITY=()
 MODE_FLAGS=()

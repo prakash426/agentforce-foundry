@@ -243,6 +243,33 @@ class SetupAgentUserTest(unittest.TestCase):
       self.assertNotIn("abc123", agent_text)
 
 
+class StderrWarningTest(unittest.TestCase):
+  WARN = "Warning: @salesforce/cli update available from 2.145.6 to 2.157.8."
+
+  def test_stderr_warning_does_not_break_verification(self):
+    import json
+    with tempfile.TemporaryDirectory() as tmp:
+      proj, bindir = make_project(tmp)
+      proc, log = run_script(proj, bindir, tmp, "setup-agent-user.sh",
+                             {"ORG_ALIAS": "fake-org", "SF_STDERR_WARN": self.WARN})
+      self.assertEqual(0, proc.returncode, msg=proc.stdout + proc.stderr)
+      record = json.loads((proj / "agent-user-fake-org.json").read_text())
+      self.assertEqual("agent.user.abc123@example.com", record["username"])
+      kept = (proj / "agent-user-create-fake-org.json").read_text()
+      self.assertNotIn("update available", kept)
+
+  def test_stderr_warning_does_not_break_setup(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      proj, bindir = make_project(tmp)
+      proc, _ = run_script(proj, bindir, tmp, "setup-service-triage.sh",
+                           {"USE_EXISTING_ORG": "1", "ORG_ALIAS": "fake-org",
+                            "AGENT_USER": "agent@example.com",
+                            "SF_ASSIGN_MODE": "full", "SF_STDERR_WARN": self.WARN})
+      self.assertEqual(0, proc.returncode, msg=proc.stdout + proc.stderr)
+      kept = (proj / "org-display-fake-org.json").read_text()
+      self.assertNotIn("update available", kept)
+
+
 class CreateTestFailureTest(unittest.TestCase):
   BASE = {"ORG_ALIAS": "fake-org", "AGENT_VERSION": "2", "RUN_TEST": "1"}
 
@@ -373,6 +400,33 @@ class PreviewTurnsTest(unittest.TestCase):
       self.assertIn("smoke check", proc.stdout + proc.stderr)
       transcript = (proj / "preview-transcripts" / "trio-transcript.jsonl").read_text().splitlines()
       self.assertEqual(3, len(transcript))
+
+
+class AgentCommandGateTest(unittest.TestCase):
+  def test_setup_blocked_before_any_org_call(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      proj, bindir = make_project(tmp)
+      proc, log = run_script(proj, bindir, tmp, "setup-service-triage.sh",
+                             {"USE_EXISTING_ORG": "1", "ORG_ALIAS": "fake-org",
+                              "SF_NO_AGENT_CMDS": "1"})
+      self.assertNotEqual(0, proc.returncode)
+      self.assertIn("2.157.8", proc.stdout + proc.stderr)
+      self.assertNotIn("sf org display", log)
+      self.assertNotIn("sf project deploy", log)
+
+  def test_preview_blocked_before_session(self):
+    import json
+    with tempfile.TemporaryDirectory() as tmp:
+      proj, bindir = make_project(tmp)
+      turns = proj / "turns.json"
+      turns.write_text(json.dumps({"sequences": [{"name": "one", "turns": [
+        {"utterance": "hi"}]}]}))
+      proc, log = run_script(proj, bindir, tmp, "preview-service-triage-turns.sh",
+                             {"ORG_ALIAS": "fake-org", "TURNS": str(turns),
+                              "SF_NO_AGENT_CMDS": "1"})
+      self.assertNotEqual(0, proc.returncode)
+      self.assertIn("2.157.8", proc.stdout + proc.stderr)
+      self.assertNotIn("agent preview start", log)
 
 
 class SetupAllFailureTest(unittest.TestCase):
