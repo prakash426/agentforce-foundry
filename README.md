@@ -74,7 +74,7 @@ Details live in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 - Python 3.11 or newer (CI runs 3.11; scripts use the standard library only).
 - Bash for org scripts (they require `pipefail` plus JSON verification).
-- Salesforce CLI with the agent plugin. CI pins `@salesforce/cli@2.157.8`. Agent user creation is verified on 2.145.6 and on the pinned 2.157.8; older CLIs may lack the command.
+- Salesforce CLI 2.157.8 or newer with the agent plugin. CI pins `@salesforce/cli@2.157.8`, which bundles the validate, publish, activate, and preview session commands. CLI 2.145.6 is proven to lack them; the setup script stops with update guidance on such CLIs. Agent user creation alone works on 2.145.6 and newer.
 - Git plus a GitHub account for the workflows.
 - For org paths: an Agentforce enabled org. Scratch orgs use Developer edition with the Einstein AI platform feature plus agent platform settings from [config/project-scratch-def.json](config/project-scratch-def.json). Source API version 60.0.
 
@@ -178,6 +178,8 @@ CI runs every offline layer on each push and pull request, plus honest org gated
 ## Guides and evidence
 
 - [Evidence record](docs/EVIDENCE.md): verified commits, commands, CI links, and pending layers.
+- [Manual org test guide](docs/MANUAL_ORG_TEST.md): hands on procedure for the first live run.
+- [Merge order](docs/MERGE_ORDER.md): branch flow and conflict avoidance.
 - [Testing guide](docs/TESTING.md): layers, thresholds, and CI behavior.
 - [Service kit guide](kits/service-triage/README.md): contract, setup, verification, and troubleshooting.
 - [Architecture](docs/ARCHITECTURE.md): design, lifecycle, and security posture.

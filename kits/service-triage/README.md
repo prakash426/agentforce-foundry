@@ -20,7 +20,7 @@ Support requests arrive as free text. Someone must decide urgency and the right 
 
 ## Prerequisites
 1. A Dev Hub enabled org plus a user who can create scratch orgs.
-2. Salesforce CLI 2.x with the agent plugin available (sf agent commands resolve).
+2. Salesforce CLI 2.157.8 or newer with the agent plugin available. Setup stops with update guidance when the lifecycle commands are missing.
 3. Python 3 for the offline harness.
 4. No paid addons. v1 uses no external APIs.
 

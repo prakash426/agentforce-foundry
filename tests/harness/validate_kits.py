@@ -186,6 +186,8 @@ DOC_FILES = [
   "docs/ARCHITECTURE.md",
   "docs/TESTING.md",
   "docs/EVIDENCE.md",
+  "docs/MANUAL_ORG_TEST.md",
+  "docs/MERGE_ORDER.md",
   "kits/service-triage/README.md",
   "kits/sales-qualification/README.md",
   "kits/internal-help/README.md",
