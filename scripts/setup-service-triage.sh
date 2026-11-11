@@ -68,10 +68,39 @@ run_step "deploy dependencies" "deploy-deps-$ALIAS.json" \
   sf project deploy start -o "$ALIAS" -d force-app/main/default/classes -d force-app/main/default/permissionsets -w 10 --json
 verify_step deploy "deploy-deps-$ALIAS.json"
 
-echo "Step 3 of 8: assign Foundry Service permission set to the admin user"
-run_step "assign permission set" "permset-$ALIAS.json" \
-  sf org assign permset -n Agentforce_Foundry_Service -o "$ALIAS" --json
-verify_step json "permset-$ALIAS.json"
+echo "Step 3 of 8: assign Foundry Service permission set to the admin user (safe to rerun)"
+run_step "show admin user $ALIAS" "admin-user-$ALIAS.json" \
+  sf org display -o "$ALIAS" --json
+verify_step json "admin-user-$ALIAS.json"
+ADMIN_USERNAME="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["result"]["username"])' "admin-user-$ALIAS.json")"
+if [ -z "$ADMIN_USERNAME" ]; then
+  echo "Could not resolve the admin username for org $ALIAS. Stopping." >&2
+  exit 1
+fi
+ESCAPED_ADMIN="$(printf '%s' "$ADMIN_USERNAME" | sed "s/'/''/g")"
+run_step "list admin assignments for $ADMIN_USERNAME" "permset-query-$ALIAS.json" \
+  sf data query -o "$ALIAS" \
+  -q "SELECT PermissionSet.Name FROM PermissionSetAssignment WHERE Assignee.Username = '$ESCAPED_ADMIN'" \
+  --json
+verify_step assignment-list "permset-query-$ALIAS.json"
+if verify_step assignment-query "permset-query-$ALIAS.json" --expect Agentforce_Foundry_Service 2>/dev/null; then
+  echo "Permission set Agentforce_Foundry_Service already assigned to $ADMIN_USERNAME."
+else
+  if run_step "assign permission set" "permset-$ALIAS.json" \
+    sf org assign permset -n Agentforce_Foundry_Service -o "$ALIAS" --json; then
+    verify_step json "permset-$ALIAS.json"
+  elif python3 scripts/verify_sf_output.py permset-duplicate "permset-$ALIAS.json" 2>/dev/null; then
+    echo "Permission set Agentforce_Foundry_Service already assigned to $ADMIN_USERNAME (duplicate on assign)."
+  else
+    echo "FAILED: assign permission set is not a duplicate. Output kept in permset-$ALIAS.json." >&2
+    exit 1
+  fi
+  run_step "confirm admin assignments for $ADMIN_USERNAME" "permset-confirm-$ALIAS.json" \
+    sf data query -o "$ALIAS" \
+    -q "SELECT PermissionSet.Name FROM PermissionSetAssignment WHERE Assignee.Username = '$ESCAPED_ADMIN'" \
+    --json
+  verify_step assignment-query "permset-confirm-$ALIAS.json" --expect Agentforce_Foundry_Service
+fi
 
 echo "Step 4 of 8: establish the agent runtime user (create or verify)"
 ORG_ALIAS="$ALIAS" bash "$SCRIPT_DIR/setup-agent-user.sh"
@@ -93,13 +122,20 @@ run_step "validate authoring bundle" "validate-$AGENT_API_NAME.json" \
 verify_step agent-validate "validate-$AGENT_API_NAME.json"
 
 echo "Step 6 of 8: publish a candidate agent version (stays inactive until activated)"
-ls "force-app/main/default/bots/$AGENT_API_NAME" > "publish-before-$AGENT_API_NAME.txt" 2>/dev/null || true
+echo "Publish output carries no version number, so the candidate is found from retrieval diff."
+{
+  ls "force-app/main/default/bots/$AGENT_API_NAME" 2>/dev/null || true
+  ls "force-app/main/default/aiAgentDefinitionVersions" 2>/dev/null || true
+} > "publish-before-$AGENT_API_NAME.txt"
 run_step "publish authoring bundle" "publish-$AGENT_API_NAME.json" \
   sf agent publish authoring-bundle -n "$AGENT_API_NAME" -o "$ALIAS" --json
 verify_step agent-publish "publish-$AGENT_API_NAME.json"
-ls "force-app/main/default/bots/$AGENT_API_NAME" > "publish-after-$AGENT_API_NAME.txt"
+{
+  ls "force-app/main/default/bots/$AGENT_API_NAME" 2>/dev/null || true
+  ls "force-app/main/default/aiAgentDefinitionVersions" 2>/dev/null || true
+} > "publish-after-$AGENT_API_NAME.txt"
 CANDIDATE_VERSION="$(verify_step publish-diff "publish-before-$AGENT_API_NAME.txt" "publish-after-$AGENT_API_NAME.txt")"
-echo "Candidate agent version: $CANDIDATE_VERSION"
+echo "Candidate agent version: $CANDIDATE_VERSION (retrieval diff; publish JSON carries no version)"
 echo "$CANDIDATE_VERSION" > "candidate-version-$AGENT_API_NAME.txt"
 
 restore_agent_file

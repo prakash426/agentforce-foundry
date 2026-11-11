@@ -1,6 +1,6 @@
 {
   "fixture": "service-triage-turns",
-  "note": "Sequential preview scripts mirroring the five catalog flows. Each sequence runs in one preview session so the agent produces every reply. expect_any entries are substring smoke checks against agent replies, not semantic proof. The word suggested is mandated by agent instructions; other entries may need tuning after the first measured run.",
+  "note": "Sequential preview scripts mirroring catalog flows plus outage and uncertainty regressions. Each sequence runs in one preview session so the agent produces every reply. expect_any entries are substring smoke checks against agent replies, not semantic proof. The word suggested is mandated by agent instructions; other entries may need tuning after the first measured run.",
   "sequences": [
     {
       "name": "help-to-triage",
@@ -35,6 +35,20 @@
       "turns": [
         {"utterance": "Registers look slow, is checkout down?"},
         {"utterance": "Not sure, might be down at two stores", "expect_any": ["human"]}
+      ]
+    },
+    {
+      "name": "second-outage-fresh",
+      "turns": [
+        {"utterance": "Checkout is down everywhere, registers frozen since 9am", "expect_any": ["suggested", "Critical_Response"]},
+        {"utterance": "Registers are down again at the north store, checkout frozen", "expect_any": ["suggested", "Critical_Response"]}
+      ]
+    },
+    {
+      "name": "unknown-impact",
+      "turns": [
+        {"utterance": "There may be an outage, but it could be a false alarm. We are still checking."},
+        {"utterance": "We do not know yet. Please do not assume there is an outage.", "expect_any": ["human"]}
       ]
     }
   ]

@@ -29,29 +29,29 @@ Boundaries: no record writes, no real human transfer (v1 has no messaging connec
 
 | Kit | Apex action plus tests | Permission set | Agent bundle | Scenario catalog | Org execution |
 | --- | --- | --- | --- | --- | --- |
-| Service Triage | Ready, 25 tests committed | Ready | Ready, transitions included | Ready, 17 scenarios plus 5 flows | Pending first org run |
+| Service Triage | Ready, 27 tests committed | Ready | Ready, deterministic scoring | Ready, 20 scenarios plus 7 flows | Version 1 failed acceptance; fixes pending retest |
 | Sales Qualification | Ready | Ready | Pending | Legacy sample only | Pending |
 | Internal Help | Ready | Ready | Pending | Legacy sample only | Pending |
 
-Service Triage is the complete starter. Sales and Internal Help ship working Apex actions while their agent integration is still pending.
+Service Triage is the complete starter. Sales and Internal Help ship working Apex actions while their agent integration is still pending. The first live Version 1 conversation behavior failed acceptance testing (fabricated classifications, no action execution, false follow-up promises); see [bug matrix](docs/BUG_MATRIX.md). Fixes in this branch are offline verified only and await staged retest in the existing org.
 
 ## Architecture
 
 ```text
 User message
     |
-triage_router (welcome plus route)
+triage_router (clear state, welcome plus route)
     |            |                 |               |              |
 triage_case  missing_info  ambiguous_request  escalation     off_topic
-    |         (ask once,      (ask once,       (recommend     (redirect,
-    |          back to         back to          human          no triage
-    |          triage)         triage)          follow up)     result)
+    |         (ask once,      (ask once,       (honest        (redirect,
+    |          back to         back to          limits,        no triage
+    |          triage)         triage)          no promises)   result)
     v
-ServiceTriageAction (Apex, invocable)
+collect_details, then deterministic ServiceTriageAction run
     |
-SUGGESTED (priority plus queue plus reason)
-NEEDS_CLARIFICATION (one targeted question)
-NEEDS_REVIEW (human follow up recommendation)
+SUGGESTED (exact priority plus queue plus reason)
+NEEDS_CLARIFICATION (one targeted question, no fields)
+NEEDS_REVIEW (honest human recommendation, no fields)
 ```
 
 Details live in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
@@ -128,7 +128,7 @@ Each stage is distinct. The scripts and CI enforce the order and verify every st
 2. Validation only deploy (CI): a dry run of the Service manifest with its own test and coverage results. Validation saves nothing and proves nothing about installed code.
 3. Runtime user: create an agent user with the supported CLI command, or verify a supplied existing user, then assign the custom Service permission set to that user. Validation and publishing never run without a valid user.
 4. Authoring bundle validation: `sf agent validate` compiles the Agent Script. A pass means it compiles, not that it is published.
-5. Publish: `sf agent publish` creates an inactive candidate version plus its Bot and planner metadata, retrieved back to the project. Deployment alone never creates a version.
+5. Publish: `sf agent publish` creates an inactive candidate version plus its agent metadata, retrieved back to the project in either the legacy bots layout or the current aiAgentDefinitionVersions layout. Deployment alone never creates a version. Publish JSON carries no version number; the candidate is identified from the retrieval diff.
 6. Activate: `sf agent activate` makes one version live. Publishing leaves versions inactive by design. Activation in your own org stays an explicit manual choice; CI activates only inside its disposable scratch org.
 7. Apex tests: run against installed candidate code with coverage kept.
 8. Agent evaluation: convert committed scenarios to a test spec, resolve names against the selected candidate version only, create the test, run it, and score results against catalog thresholds with commit, version, and run id recorded.
@@ -150,7 +150,7 @@ The runtime user needs org platform entitlements plus the custom Apex permission
 These examples are illustrative. No live conversation has happened yet; they will be replaced with measured transcripts after the first org run.
 
 User: Checkout is down everywhere, registers frozen since 9am.
-Agent: Suggested priority High for queue Critical_Response. Reason: severity signals found: down. This is a suggestion only. Want me to prepare a handoff note for the on call queue.
+Agent: Suggested priority High for queue Critical_Response. Reason: severity signals found: down. This is a suggestion only. For human follow up, contact your support channel directly with this suggestion as context.
 
 User: Where is my refund for March.
 Agent: Suggested priority Medium for queue Billing. Reason: billing signals found: refund. This is a suggestion only. Anything else on this order.
@@ -178,7 +178,8 @@ CI runs every offline layer on each push and pull request, plus honest org gated
 ## Guides and evidence
 
 - [Evidence record](docs/EVIDENCE.md): verified commits, commands, CI links, and pending layers.
-- [Manual org test guide](docs/MANUAL_ORG_TEST.md): hands on procedure for the first live run.
+- [Bug matrix](docs/BUG_MATRIX.md): acceptance failures mapped to fixes, regressions, and retest status.
+- [Manual org test guide](docs/MANUAL_ORG_TEST.md): hands on procedure for the first live run plus staged retest.
 - [Merge order](docs/MERGE_ORDER.md): branch flow and conflict avoidance.
 - [Testing guide](docs/TESTING.md): layers, thresholds, and CI behavior.
 - [Service kit guide](kits/service-triage/README.md): contract, setup, verification, and troubleshooting.
@@ -186,8 +187,8 @@ CI runs every offline layer on each push and pull request, plus honest org gated
 
 ## Known limitations
 
-- No org execution has happened yet: Apex runs, deployment, publishing, activation, preview, and agent evaluation are all pending a first authorized org.
-- Agent bundle syntax follows official template patterns and locally verified command shapes but has never compiled server side.
+- Version 1 reached an org (deploy, user setup, validation, publish, 25 Apex tests, activation) but its conversations failed acceptance testing. The fixes here are offline verified only; no fix is org verified before retesting.
+- The rewritten agent bundle uses deterministic logic plus prompt instructions following documented Agent Script semantics, but the new shape has not compiled server side yet.
 - Queue labels are suggestions, never validated against any org.
 - Negation and uncertainty word lists are heuristics; measured runs may require tuning.
 - Converter topic and action names resolve against retrieved metadata; custom JSONPath evaluations ship empty until a first verbose run.

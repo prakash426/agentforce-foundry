@@ -25,7 +25,7 @@ behavior good.
 
 ## Prerequisites
 
-1. This branch checked out: `feature/service-triage-complete`.
+1. Current `main` checked out (the Service Triage work is merged; the old `feature/service-triage-complete` branch is stale).
 2. Salesforce CLI 2.157.8 or newer. The agent lifecycle commands
    (validate, publish, activate, preview sessions) do not exist on older
    CLIs; 2.145.6 was proven to lack them. The setup script checks this
@@ -111,17 +111,70 @@ file, and `ci-results`.
 1. Deploy, permission sets, validation, publish, and Apex tests are safe
    to rerun. Each publish creates a new candidate version; note which one
    you activate and evaluate.
-2. Org creation is the one non idempotent step. It fails if the alias
+2. Confirmed rerun issue, now fixed: setup used to stop at Step 3 on a
+   rerun with `Duplicate PermissionSetAssignment` when assigning
+   `Agentforce_Foundry_Service` to the admin. Step 3 now resolves the
+   admin username in the targeted org, queries current assignments,
+   reports already assigned and continues when present, and otherwise
+   assigns plus confirms. A duplicate response on assign is accepted
+   only when the payload carries that exact failure; all other
+   failures still stop the script.
+3. Org creation is the one non idempotent step. It fails if the alias
    exists. Delete the old org or export a new `ORG_ALIAS` and rerun.
-3. Each setup run without `AGENT_USER` creates a new runtime user. On a
+4. Each setup run without `AGENT_USER` creates a new runtime user. On a
    rerun into the same org, reuse the earlier user to avoid duplicates:
 
 ```sh
 USE_EXISTING_ORG=1 ORG_ALIAS=my-dev-org AGENT_USER=<earlier-username> bash scripts/setup-service-triage.sh
 ```
 
-4. Record the trio after every setup: commit SHA, candidate version,
+5. Record the trio after every setup: commit SHA, candidate version,
    runtime username mode (created or existing).
+
+## Staged retest in the existing org
+
+Use this after the Version 1 acceptance failures. It reuses the tested
+org and its runtime user; it publishes a new candidate version for the
+fixed bundle. Do not run this without explicit authorization to touch
+the org. Deploy, compile, publish, Apex execution, activation, preview,
+and evaluation stay separate stages with their own checkpoints.
+
+Stage 1, setup rerun. Reuse the existing runtime user:
+
+```sh
+USE_EXISTING_ORG=1 ORG_ALIAS=my-dev-org AGENT_USER=<earlier-username> bash scripts/setup-service-triage.sh
+```
+
+Checkpoints: Step 3 reports already assigned for the admin set instead
+of failing; Step 4 verifies the existing user without creating a
+duplicate; validation completes; publish prints a new candidate
+version found from the actual retrieval layout; Apex runs 27 tests.
+
+Stage 2, activate and preview. Activate the new candidate, then run
+the scripted preview and keep every transcript:
+
+```sh
+sf agent activate -n Service_Triage_Agent --version N -o my-dev-org --json
+ORG_ALIAS=my-dev-org bash scripts/preview-service-triage-turns.sh
+```
+
+Checkpoints per turn: the trace shows triage_service_case invoked with
+current inputs before any classification reply; replies carry exact
+values (High with Critical_Response, Medium with Billing, Low with
+General_Support) or omit fields on NEEDS codes; transfer requests
+state limits with no promises; uncertain turns preserve unknown
+impact; override turns score the valid issue.
+
+Stage 3, evaluate. Convert, resolve against the new candidate,
+create, run, and score:
+
+```sh
+ORG_ALIAS=my-dev-org AGENT_VERSION=N RUN_TEST=1 bash scripts/create-service-triage-test.sh
+```
+
+Checkpoints: resolver reports the new layout and candidate; the
+checker passes with commit, version, and run id recorded; transcripts
+and structured trace evidence are preserved with the record.
 
 ## Activate one version
 
@@ -214,8 +267,9 @@ limit in every evaluation record.
    definition in config/project-scratch-def.json carries the agent
    platform settings, then read the compiler location in the JSON.
 6. Resolver rejects a name: confirm the `AGENT_VERSION` value and that
-   publish retrieval exists locally. Names from another agent or version
-   are rejected by design.
+   publish retrieval exists locally in either `force-app/main/default/bots`
+   or `force-app/main/default/aiAgentDefinitionVersions`. Names from
+   another agent or version are rejected by design.
 7. Preview shows no action: confirm the custom permission set on the
    runtime user plus activation, then retry.
 
@@ -229,4 +283,7 @@ sf org delete scratch -o foundry-triage
 
 Leave the working tree free of run outputs before committing: per step
 JSON captures, `.err` sidecars, `ci-results`, `agent-results`,
-`preview-transcripts`, and `specs` are local only.
+`preview-transcripts`, and `specs` are local only. Never commit local
+usernames, generated metadata containing org-specific values (retrieved
+version directories, graph blobs), credentials, auth URLs, or run
+outputs. The agent file must show the placeholder before every commit.

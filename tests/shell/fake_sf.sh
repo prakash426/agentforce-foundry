@@ -77,6 +77,8 @@ case "$1 $2 $3" in
         key="assign-query"
         if [ -f "${SF_LOG}.assigned" ]; then
           out="assign-full.json"
+        elif [ "${SF_ASSIGN_MODE:-}" = "duplicate" ]; then
+          out="assign-thin.json"
         else
           out="assign-${SF_ASSIGN_MODE:-full}.json"
         fi
@@ -93,10 +95,18 @@ if [ -n "${SF_STDERR_WARN:-}" ]; then
   echo "$SF_STDERR_WARN" >&2
 fi
 if [ "$key" = "publish" ]; then
-  mkdir -p "force-app/main/default/bots/Service_Triage_Agent"
-  echo "<BotVersion/>" > "force-app/main/default/bots/Service_Triage_Agent/v3.botVersion-meta.xml"
+  mkdir -p "force-app/main/default/aiAgentDefinitionVersions/Service_Triage_Agent#3"
+  printf '%s\n' '<AiAgentDefinitionVersion xmlns="http://soap.sforce.com/2006/04/metadata">' \
+    '<genAiPlannerName>Service_Triage_Agent_v3</genAiPlannerName><version>3</version>' \
+    '</AiAgentDefinitionVersion>' \
+    > "force-app/main/default/aiAgentDefinitionVersions/Service_Triage_Agent#3/Service_Triage_Agent#3.aiAgentDefinitionVersion-meta.xml"
 fi
 if [ "$key" = "assign" ]; then
+  if [ "${SF_ASSIGN_MODE:-}" = "duplicate" ]; then
+    touch "${SF_LOG}.assigned"
+    cat "${SF_FIXTURE_DIR:?}/permset-duplicate.json"
+    exit 1
+  fi
   touch "${SF_LOG}.assigned"
 fi
 cat "${SF_FIXTURE_DIR:?}/$out"

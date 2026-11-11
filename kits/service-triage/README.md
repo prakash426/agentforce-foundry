@@ -13,10 +13,10 @@ Support requests arrive as free text. Someone must decide urgency and the right 
 
 ## Behavior map
 1. triage_router welcomes and sends the request to one subagent.
-2. triage_case overwrites subject and details fresh for each request, runs triage_service_case once, then follows the outcome code: present suggestions with the word suggested, ask one targeted question on NEEDS_CLARIFICATION, recommend human follow up on NEEDS_REVIEW. It transitions to escalation on explicit human requests and to off-topic handling for non support chat. Negation and uncertainty in user text are preserved into the action inputs.
+2. triage_case collects subject and details fresh for each request through collect_details, then a deterministic scoring step runs triage_service_case once with those values and stores the outcome, priority, queue, and reason. The router clears triage state every turn so nothing leaks across requests. The reply follows the outcome code: present exact suggested values with the word suggested, ask one targeted question on NEEDS_CLARIFICATION with no priority or queue, recommend human follow up on NEEDS_REVIEW with no priority or queue. It transitions to escalation on explicit human requests and to off-topic handling for non support chat. Negation and uncertainty in user text are preserved into the action inputs. No classification is presented without a current scoring result.
 3. missing_info and ambiguous_request ask for what is missing without guessing, then transition back to triage_case for scoring.
-4. escalation recommends human follow up with the suggestion as context. V1 never transfers to a human; there is no Omni-Channel connection and no transfer tool.
-5. off_topic redirects non support chat and reveals nothing about the system.
+4. escalation recommends human follow up with the suggestion as context. V1 never transfers to a human; there is no Omni-Channel connection and no transfer tool. It states plainly that no case, notification, or task is created, promises no contact, review, or waiting, and recommends a self-serve next step.
+5. off_topic redirects non support chat and reveals nothing about the system. Refusal is reserved for sensitive or unsupported actions; a support issue beside override text is sent back to triage so the valid report is scored, never discarded.
 
 ## Prerequisites
 1. A Dev Hub enabled org plus a user who can create scratch orgs.
@@ -27,7 +27,7 @@ Support requests arrive as free text. Someone must decide urgency and the right 
 ## Setup (automated)
 1. Run DEV_HUB=my-hub bash scripts/setup-service-triage.sh with your Dev Hub alias. It creates a scratch org, deploys Apex plus permission sets, assigns the permission set to the admin, establishes the agent runtime user with the custom permission set, validates the authoring bundle, publishes a candidate agent version (inactive), and runs the Service Apex tests against installed code.
 2. To reuse an existing eligible dev org instead of creating a scratch org, run USE_EXISTING_ORG=1 ORG_ALIAS=my-dev-org bash scripts/setup-service-triage.sh. The org must be Agentforce enabled.
-3. Org creation is the one non idempotent step: it fails if the alias exists. Delete the old org or export a new ORG_ALIAS and rerun.
+3. Org creation is the one non idempotent step: it fails if the alias exists. Delete the old org or export a new ORG_ALIAS and rerun. Admin permission assignment is safe to rerun: setup reports already assigned and continues when the set is present.
 4. Deploying metadata alone never creates a published executable agent version. Only sf agent publish creates the candidate version, and only sf agent activate makes a version live.
 
 ## Agent user and permissions
@@ -46,7 +46,7 @@ Seeded conversation history in converted specs tests the next agent response in 
 
 ## Example conversations (illustrative until executed)
 User: Checkout is down everywhere, registers frozen since 9am.
-Agent: Suggested priority High for queue Critical_Response. Reason: severity signals found: down. This is a suggestion only. Want me to prepare a handoff note for the on call queue.
+Agent: Suggested priority High for queue Critical_Response. Reason: severity signals found: down. This is a suggestion only. For human follow up, contact your support channel directly with this suggestion as context.
 
 User: Where is my refund for March.
 Agent: Suggested priority Medium for queue Billing. Reason: billing signals found: refund. This is a suggestion only. Anything else on this order.
@@ -72,7 +72,7 @@ Agent: I can triage this once I know more. What is the issue, and who or what is
 3. Validation or publish fails on the agent bundle: confirm the scratch definition includes the agent platform settings from config/project-scratch-def.json, then read the compiler error location in the json output.
 4. Apex tests fail: run the single class with junit output and read the first failing assertion.
 5. Agent preview shows no action: confirm the custom permission set on the runtime user plus agent activation, then retry.
-6. Resolver fails on a name: confirm the selected agent version exists and its planner references the expected topic or action. Names from another agent or version are rejected by design.
+6. Resolver fails on a name: confirm the selected agent version exists in either retrieval layout and its planner references the expected topic or action. Names from another agent or version are rejected by design.
 
 ## Cleanup
 Delete the scratch org when finished so the trial allocation is released.

@@ -73,7 +73,9 @@ public with sharing class ServiceTriageAction {
   };
   private static final List<String> UNCERTAINTY_MARKERS = new List<String>{
     'maybe', 'might be', 'may be', 'possible', 'possibly', 'not sure',
-    'unsure', 'uncertain', 'unclear', 'checking now', 'checking'
+    'unsure', 'uncertain', 'unclear', 'checking now', 'checking',
+    'dont know', 'do not know', 'unknown', 'dont assume',
+    'do not assume', 'not known', 'cannot tell', 'cant tell'
   };
   private static final List<String> MAINTENANCE_WORDS = new List<String>{
     'scheduled', 'planned maintenance', 'maintenance window'

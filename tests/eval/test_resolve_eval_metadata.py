@@ -30,6 +30,31 @@ BOT_XML = """<?xml version="1.0" encoding="UTF-8"?>
 </BotVersion>
 """
 
+VERSION_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<AiAgentDefinitionVersion xmlns="http://soap.sforce.com/2006/04/metadata">
+  <genAiPlannerName>%s</genAiPlannerName>
+  <planner><fullName>%s</fullName>%s</planner>
+  <status>Inactive</status>
+  <version>%s</version>
+</AiAgentDefinitionVersion>
+"""
+
+
+def version_body(planner, version, topics, actions_by_topic):
+  links = "".join("<localTopicLinks><genAiPluginName>%s</genAiPluginName></localTopicLinks>" % t
+                  for t in topics)
+  blocks = []
+  for topic in topics:
+    actions = actions_by_topic.get(topic, [])
+    action_links = "".join("<localActionLinks><functionName>%s</functionName></localActionLinks>" % a
+                           for a in actions)
+    local_actions = "".join(
+      "<localActions><localDeveloperName>%s</localDeveloperName></localActions>" % a for a in actions)
+    blocks.append("<localTopics><localDeveloperName>%s</localDeveloperName>%s%s</localTopics>" % (
+      topic, action_links, local_actions))
+  inner = links + "".join(blocks)
+  return VERSION_XML % (planner, planner, inner, version)
+
 
 def good_catalog():
   return {
@@ -58,13 +83,20 @@ def bundle_body(topics, actions=()):
 
 def write_project(tmp, layout):
   """layout: dict with bots {agent: {version: planner}}, bundles {name: (topics, actions)},
-  plugins {name: action}, plus optional raw files {relpath: content}."""
+  plugins {name: action}, versions {agent: {version: (planner, topics, actions_by_topic)}},
+  plus optional raw files {relpath: content}."""
   root = Path(tmp) / "proj"
   for agent, versions in layout.get("bots", {}).items():
     for version, planner in versions.items():
       path = root / "force-app/main/default/bots" / agent / ("v%s.botVersion-meta.xml" % version)
       path.parent.mkdir(parents=True, exist_ok=True)
       path.write_text(BOT_XML % planner)
+  for agent, versions in layout.get("versions", {}).items():
+    for version, (planner, topics, actions_by_topic) in versions.items():
+      vdir = root / "force-app/main/default/aiAgentDefinitionVersions" / ("%s#%s" % (agent, version))
+      vdir.mkdir(parents=True, exist_ok=True)
+      (vdir / ("%s#%s.aiAgentDefinitionVersion-meta.xml" % (agent, version))).write_text(
+        version_body(planner, version, topics, actions_by_topic))
   for name, (topics, actions) in layout.get("bundles", {}).items():
     path = root / "force-app/main/default/genAiPlannerBundles" / (name + ".genAiPlannerBundle-meta.xml")
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -241,6 +273,60 @@ class CandidateScopeTest(unittest.TestCase):
       spec_path, map_path = convert_to(tmp, catalog)
       self.assertEqual(0, run_resolve(tmp, root, spec_path, map_path))
       self.assertIn("ambiguous_request", (Path(tmp) / "resolved.yaml").read_text())
+
+
+def version_layout():
+  return {
+    "versions": {
+      "SvcA": {
+        "1": ("PlannerA1", ["legacy_triage"], {"legacy_triage": ["legacy_action"]}),
+        "2": ("PlannerA2", ["triage_case", "ambiguous_request"],
+              {"triage_case": ["triage_service_case"], "ambiguous_request": []}),
+      },
+    },
+  }
+
+
+class DefinitionVersionLayoutTest(unittest.TestCase):
+  def test_current_layout_resolves(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      root = write_project(tmp, version_layout())
+      spec_path, map_path = convert_to(tmp, good_catalog())
+      self.assertEqual(0, run_resolve(tmp, root, spec_path, map_path))
+      report = json.loads((Path(tmp) / "report.json").read_text())
+      self.assertEqual("agent-definition-version", report["layout"])
+      self.assertIn("triage_service_case", report["reachable_actions"])
+      self.assertIn("version_file", report)
+
+  def test_missing_retrieval_fails(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      root = write_project(tmp, {"versions": {}})
+      spec_path, map_path = convert_to(tmp, good_catalog())
+      self.assertEqual(1, run_resolve(tmp, root, spec_path, map_path))
+
+  def test_version_mismatch_fails(self):
+    layout = version_layout()
+    layout["raw"] = {"force-app/main/default/aiAgentDefinitionVersions/SvcA#2/wrong-meta.xml":
+                     "<NotAVersion/>"}
+    with tempfile.TemporaryDirectory() as tmp:
+      root = write_project(tmp, layout)
+      vdir = root / "force-app/main/default/aiAgentDefinitionVersions/SvcA#2"
+      for path in vdir.glob("*.xml"):
+        if "wrong" not in path.name:
+          path.write_text(path.read_text().replace("<version>2</version>", "<version>9</version>"))
+      spec_path, map_path = convert_to(tmp, good_catalog())
+      self.assertEqual(1, run_resolve(tmp, root, spec_path, map_path))
+
+  def test_incompatible_format_fails(self):
+    layout = {"versions": {"SvcA": {"2": ("PlannerA2", ["triage_case"], {})}}}
+    layout["raw"] = {}
+    with tempfile.TemporaryDirectory() as tmp:
+      root = write_project(tmp, layout)
+      vdir = root / "force-app/main/default/aiAgentDefinitionVersions/SvcA#2"
+      for path in vdir.glob("*.xml"):
+        path.write_text("<AiAgentDefinitionVersion><oops")
+      spec_path, map_path = convert_to(tmp, good_catalog())
+      self.assertEqual(1, run_resolve(tmp, root, spec_path, map_path))
 
 
 if __name__ == "__main__":
