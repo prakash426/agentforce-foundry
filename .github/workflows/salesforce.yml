@@ -139,7 +139,7 @@ jobs:
           set -o pipefail
           RUNTIME_USER="$(python3 -c 'import json; print(json.load(open("scratch-results/agent-user-ci-triage.json"))["username"])')"
           echo "Publishing with runtime user $RUNTIME_USER"
-          ls force-app/main/default/bots/Service_Triage_Agent > scratch-results/publish-before.txt 2>/dev/null || true
+          { ls force-app/main/default/bots/Service_Triage_Agent 2>/dev/null || true; ls force-app/main/default/aiAgentDefinitionVersions 2>/dev/null || true; } > scratch-results/publish-before.txt
           cp force-app/main/default/aiAuthoringBundles/Service_Triage_Agent/Service_Triage_Agent.agent /tmp/agent-backup.agent
           sed "s/UPDATE_WITH_DEFAULT_AGENT_USER/$RUNTIME_USER/" /tmp/agent-backup.agent > force-app/main/default/aiAuthoringBundles/Service_Triage_Agent/Service_Triage_Agent.agent
           set +e
@@ -156,8 +156,7 @@ jobs:
         if: steps.gate.outputs.has_secret == 'true'
         run: |
           python3 scripts/verify_sf_output.py agent-publish scratch-results/agent-publish.json
-          ls force-app/main/default/bots/Service_Triage_Agent | tee scratch-results/published-versions.txt
-          ls force-app/main/default/bots/Service_Triage_Agent > scratch-results/publish-after.txt
+          { ls force-app/main/default/bots/Service_Triage_Agent 2>/dev/null || true; ls force-app/main/default/aiAgentDefinitionVersions 2>/dev/null || true; } | tee scratch-results/published-versions.txt > scratch-results/publish-after.txt
           python3 scripts/verify_sf_output.py publish-diff scratch-results/publish-before.txt scratch-results/publish-after.txt | tee scratch-results/agent-version.txt
       - name: activate candidate in the disposable org
         if: steps.gate.outputs.has_secret == 'true'

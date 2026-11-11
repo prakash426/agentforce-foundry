@@ -1,22 +1,31 @@
 """Resolve eval spec topics and actions against one candidate version.
 
 Reads a converted test spec plus its mapping manifest, follows the
-selected BotVersion through its planner to exactly the topics and
-actions reachable from that candidate, and resolves every expected
-name within that reachable set only. Names that exist solely in
-another agent or version are rejected, never silently borrowed. Fails
-before test creation on missing, ambiguous, malformed, or dangling
+selected candidate version to exactly the topics and actions
+reachable from that candidate, and resolves every expected name
+within that reachable set only. Names that exist solely in another
+agent or version are rejected, never silently borrowed. Fails before
+test creation on missing, ambiguous, malformed, or dangling
 references. Writes a resolved spec plus a report recording the
 candidate, every traversed reference, and each decision. No org needed.
 
-Metadata relationships follow the structures the agent plugin itself
-parses: a BotVersion file names its planner through
-conversationDefinitionPlanners, a GenAiPlannerBundle links topics
-through localTopicLinks and actions through localTopics action links,
-and each GenAiPlugin names its functions. Metadata full names come
-from file names, the same way the platform derives them. No
-project-wide name search is used for resolution; the full project is
-consulted only to explain where an outside-candidate name lives.
+Two retrieval layouts are supported, because publish retrieval has
+been observed in both shapes and the layout is not attributed to any
+API version without evidence:
+
+- Legacy: bots/<Agent>/v<N>.botVersion-meta.xml names its planner
+  through conversationDefinitionPlanners, a GenAiPlannerBundle links
+  topics through localTopicLinks and actions through localTopics
+  action links, and each GenAiPlugin names its functions.
+- Current: aiAgentDefinitionVersions/<Agent>#<N>/
+  <Agent>#<N>.aiAgentDefinitionVersion-meta.xml carries an inline
+  planner with localTopicLinks, localTopics, localActionLinks, and
+  localActions, plus a version element that must match.
+
+Metadata full names come from file names, the same way the platform
+derives them. No project-wide name search is used for resolution; the
+full project is consulted only to explain where an outside-candidate
+name lives.
 
 Usage:
   python3 tests/eval/resolve_eval_metadata.py --spec SPEC --map MAP
@@ -77,11 +86,39 @@ def find_bot_version(root, agent, version):
     if local_tag(tree.getroot().tag) != "BotVersion":
       continue
     matches.append(path)
-  if not matches:
-    return fail("no BotVersion file for agent %s version v%s" % (agent, version))
   if len(matches) > 1:
-    return fail("ambiguous BotVersion files for agent %s version v%s" % (agent, version))
-  return matches[0]
+    fail("ambiguous BotVersion files for agent %s version v%s" % (agent, version))
+    return None
+  return matches[0] if matches else None
+
+
+def find_agent_definition_version(root, agent, version):
+  matches = []
+  wanted_dir = "%s#%s" % (agent, version)
+  for path in sorted(root.rglob("*-meta.xml")):
+    if path.parent.name != wanted_dir:
+      continue
+    try:
+      parsed = ET.parse(str(path)).getroot()
+    except ET.ParseError:
+      fail("candidate file %s does not parse" % path.relative_to(root))
+      return None
+    if local_tag(parsed.tag) != "AiAgentDefinitionVersion":
+      continue
+    file_version = ""
+    for node in parsed.iter():
+      if local_tag(node.tag) == "version" and node.text and node.text.strip():
+        file_version = node.text.strip()
+        break
+    if file_version != version:
+      fail("candidate file %s declares version %s, expected %s" % (
+        path.relative_to(root), file_version or "missing", version))
+      return None
+    matches.append(path)
+  if len(matches) > 1:
+    fail("ambiguous AiAgentDefinitionVersion files for agent %s version v%s" % (agent, version))
+    return None
+  return matches[0] if matches else None
 
 
 def planner_of(bot_root):
@@ -117,6 +154,38 @@ def collect_planner_refs(planner_root):
   for node in planner_root.iter():
     if local_tag(node.tag) == "functionName" and node.text and node.text.strip():
       actions.append(node.text.strip())
+  return topics, actions
+
+
+def collect_inline_refs(version_root):
+  topics = []
+  for node in version_root.iter():
+    if local_tag(node.tag) == "genAiPluginName" and node.text and node.text.strip():
+      name = node.text.strip()
+      if name not in topics:
+        topics.append(name)
+  actions = []
+  for topic_node in version_root.iter():
+    if local_tag(topic_node.tag) != "localTopics":
+      continue
+    for elem in list(topic_node):
+      if local_tag(elem.tag) == "localDeveloperName" and elem.text and elem.text.strip():
+        name = elem.text.strip()
+        if name not in topics:
+          topics.append(name)
+      if local_tag(elem.tag) == "localActionLinks":
+        for fn in elem.iter():
+          if local_tag(fn.tag) == "functionName" and fn.text and fn.text.strip():
+            name = fn.text.strip()
+            if name not in actions:
+              actions.append(name)
+      if local_tag(elem.tag) == "localActions":
+        for sub in elem.iter():
+          if local_tag(sub.tag) == "localDeveloperName" and sub.text and sub.text.strip():
+            name = sub.text.strip()
+            if name not in actions:
+              actions.append(name)
+  topics = [t for t in topics if t not in actions]
   return topics, actions
 
 
@@ -216,48 +285,76 @@ def resolve_candidate(spec_text, mapping, root, agent, version):
     return fail("mapping subject %s does not match selected agent %s" % (
       mapping.get("subjectName"), agent))
   root = Path(root)
-  bot_file = find_bot_version(root, agent, version)
-  if bot_file is None:
-    return None
-  bot_root = parse_xml(bot_file)
-  if bot_root is None:
-    return None
-  planner = planner_of(bot_root)
-  if not planner:
-    return fail("BotVersion %s names no planner" % bot_file.relative_to(root))
-  bundles = find_by_full_name(root, "GenAiPlannerBundle", planner)
-  if not bundles:
-    return fail("planner %s referenced by %s v%s has no bundle file" % (planner, agent, version))
-  if len(bundles) > 1:
-    return fail("planner %s matches multiple bundle files" % planner)
-  bundle_file = bundles[0]
-  bundle_root = parse_xml(bundle_file)
-  if bundle_root is None:
-    return None
-  topic_refs, planner_actions = collect_planner_refs(bundle_root)
-  reachable_topics = {}
+  layout = ""
+  candidate_file = None
+  planner = ""
+  bundle_file = None
   plugin_files = []
-  for ref in topic_refs:
-    plugins = find_by_full_name(root, "GenAiPlugin", ref)
-    if not plugins:
-      return fail("topic %s referenced by planner %s has no plugin file" % (ref, planner))
-    if len(plugins) > 1:
-      return fail("topic %s matches multiple plugin files" % ref)
-    rel = str(plugins[0].relative_to(root))
-    reachable_topics[ref] = rel
-    plugin_files.append(rel)
-    plugin_root = parse_xml(plugins[0])
-    if plugin_root is None:
-      return None
+  reachable_topics = {}
   reachable_actions = {}
-  for action in planner_actions:
-    reachable_actions.setdefault(action, str(bundle_file.relative_to(root)))
-  for ref, rel in sorted(reachable_topics.items()):
-    plugin_root = parse_xml(root / rel)
-    if plugin_root is None:
+  bot_file = find_bot_version(root, agent, version)
+  version_file = None if bot_file is not None else find_agent_definition_version(root, agent, version)
+  if bot_file is None and version_file is None:
+    return fail("no candidate metadata for agent %s version v%s: checked bots/%s/v%s and aiAgentDefinitionVersions/%s#%s" % (
+      agent, version, agent, version, agent, version))
+  if bot_file is not None:
+    layout = "legacy-bot"
+    candidate_file = bot_file
+    bot_root = parse_xml(bot_file)
+    if bot_root is None:
       return None
-    for action in plugin_functions(plugin_root):
+    planner = planner_of(bot_root)
+    if not planner:
+      return fail("BotVersion %s names no planner" % bot_file.relative_to(root))
+    bundles = find_by_full_name(root, "GenAiPlannerBundle", planner)
+    if not bundles:
+      return fail("planner %s referenced by %s v%s has no bundle file" % (planner, agent, version))
+    if len(bundles) > 1:
+      return fail("planner %s matches multiple bundle files" % planner)
+    bundle_file = bundles[0]
+    bundle_root = parse_xml(bundle_file)
+    if bundle_root is None:
+      return None
+    topic_refs, planner_actions = collect_planner_refs(bundle_root)
+    for ref in topic_refs:
+      plugins = find_by_full_name(root, "GenAiPlugin", ref)
+      if not plugins:
+        return fail("topic %s referenced by planner %s has no plugin file" % (ref, planner))
+      if len(plugins) > 1:
+        return fail("topic %s matches multiple plugin files" % ref)
+      rel = str(plugins[0].relative_to(root))
+      reachable_topics[ref] = rel
+      plugin_files.append(rel)
+      plugin_root = parse_xml(plugins[0])
+      if plugin_root is None:
+        return None
+    for action in planner_actions:
+      reachable_actions.setdefault(action, str(bundle_file.relative_to(root)))
+    for ref, rel in sorted(reachable_topics.items()):
+      plugin_root = parse_xml(root / rel)
+      if plugin_root is None:
+        return None
+      for action in plugin_functions(plugin_root):
+        reachable_actions.setdefault(action, rel)
+  else:
+    layout = "agent-definition-version"
+    candidate_file = version_file
+    version_root = parse_xml(version_file)
+    if version_root is None:
+      return None
+    for node in version_root.iter():
+      if local_tag(node.tag) == "genAiPlannerName" and node.text and node.text.strip():
+        planner = node.text.strip()
+        break
+    if not planner:
+      return fail("candidate %s names no planner" % version_file.relative_to(root))
+    topic_refs, inline_actions = collect_inline_refs(version_root)
+    rel = str(version_file.relative_to(root))
+    for ref in topic_refs:
+      reachable_topics[ref] = rel
+    for action in inline_actions:
       reachable_actions.setdefault(action, rel)
+    plugin_files = []
   elsewhere_topics = project_names(root, "GenAiPlugin") - set(reachable_topics)
   cases = parse_spec_cases(spec_text)
   if cases is None:
@@ -270,7 +367,7 @@ def resolve_candidate(spec_text, mapping, root, agent, version):
       parsed = ET.parse(str(path)).getroot()
     except ET.ParseError:
       continue
-    if local_tag(parsed.tag) in ("GenAiPlugin", "GenAiPlannerBundle"):
+    if local_tag(parsed.tag) in ("GenAiPlugin", "GenAiPlannerBundle", "AiAgentDefinitionVersion"):
       for node in parsed.iter():
         if local_tag(node.tag) == "functionName" and node.text and node.text.strip():
           elsewhere_actions.add(node.text.strip())
@@ -315,9 +412,10 @@ def resolve_candidate(spec_text, mapping, root, agent, version):
     "generated_at": datetime.now(timezone.utc).isoformat(),
     "agent": agent,
     "version": "v" + version,
+    "layout": layout,
     "planner": planner,
-    "bot_version_file": str(bot_file.relative_to(root)),
-    "planner_file": str(bundle_file.relative_to(root)),
+    "candidate_file": str(candidate_file.relative_to(root)),
+    "planner_file": str(bundle_file.relative_to(root)) if bundle_file is not None else str(candidate_file.relative_to(root)),
     "plugin_files": sorted(set(plugin_files)),
     "reachable_topics": sorted(reachable_topics),
     "reachable_actions": sorted(reachable_actions),
@@ -325,6 +423,10 @@ def resolve_candidate(spec_text, mapping, root, agent, version):
     "decisions": decisions,
     "substitutions": substitutions,
   }
+  if layout == "legacy-bot":
+    report["bot_version_file"] = str(candidate_file.relative_to(root))
+  else:
+    report["version_file"] = str(candidate_file.relative_to(root))
   return cases, report
 
 

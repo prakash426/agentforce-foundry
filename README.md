@@ -128,7 +128,7 @@ Each stage is distinct. The scripts and CI enforce the order and verify every st
 2. Validation only deploy (CI): a dry run of the Service manifest with its own test and coverage results. Validation saves nothing and proves nothing about installed code.
 3. Runtime user: create an agent user with the supported CLI command, or verify a supplied existing user, then assign the custom Service permission set to that user. Validation and publishing never run without a valid user.
 4. Authoring bundle validation: `sf agent validate` compiles the Agent Script. A pass means it compiles, not that it is published.
-5. Publish: `sf agent publish` creates an inactive candidate version plus its Bot and planner metadata, retrieved back to the project. Deployment alone never creates a version.
+5. Publish: `sf agent publish` creates an inactive candidate version plus its agent metadata, retrieved back to the project in either the legacy bots layout or the current aiAgentDefinitionVersions layout. Deployment alone never creates a version. Publish JSON carries no version number; the candidate is identified from the retrieval diff.
 6. Activate: `sf agent activate` makes one version live. Publishing leaves versions inactive by design. Activation in your own org stays an explicit manual choice; CI activates only inside its disposable scratch org.
 7. Apex tests: run against installed candidate code with coverage kept.
 8. Agent evaluation: convert committed scenarios to a test spec, resolve names against the selected candidate version only, create the test, run it, and score results against catalog thresholds with commit, version, and run id recorded.
