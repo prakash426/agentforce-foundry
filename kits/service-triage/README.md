@@ -27,7 +27,7 @@ Support requests arrive as free text. Someone must decide urgency and the right 
 ## Setup (automated)
 1. Run DEV_HUB=my-hub bash scripts/setup-service-triage.sh with your Dev Hub alias. It creates a scratch org, deploys Apex plus permission sets, assigns the permission set to the admin, establishes the agent runtime user with the custom permission set, validates the authoring bundle, publishes a candidate agent version (inactive), and runs the Service Apex tests against installed code.
 2. To reuse an existing eligible dev org instead of creating a scratch org, run USE_EXISTING_ORG=1 ORG_ALIAS=my-dev-org bash scripts/setup-service-triage.sh. The org must be Agentforce enabled.
-3. Org creation is the one non idempotent step: it fails if the alias exists. Delete the old org or export a new ORG_ALIAS and rerun.
+3. Org creation is the one non idempotent step: it fails if the alias exists. Delete the old org or export a new ORG_ALIAS and rerun. Admin permission assignment is safe to rerun: setup reports already assigned and continues when the set is present.
 4. Deploying metadata alone never creates a published executable agent version. Only sf agent publish creates the candidate version, and only sf agent activate makes a version live.
 
 ## Agent user and permissions

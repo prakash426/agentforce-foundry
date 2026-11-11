@@ -68,10 +68,39 @@ run_step "deploy dependencies" "deploy-deps-$ALIAS.json" \
   sf project deploy start -o "$ALIAS" -d force-app/main/default/classes -d force-app/main/default/permissionsets -w 10 --json
 verify_step deploy "deploy-deps-$ALIAS.json"
 
-echo "Step 3 of 8: assign Foundry Service permission set to the admin user"
-run_step "assign permission set" "permset-$ALIAS.json" \
-  sf org assign permset -n Agentforce_Foundry_Service -o "$ALIAS" --json
-verify_step json "permset-$ALIAS.json"
+echo "Step 3 of 8: assign Foundry Service permission set to the admin user (safe to rerun)"
+run_step "show admin user $ALIAS" "admin-user-$ALIAS.json" \
+  sf org display -o "$ALIAS" --json
+verify_step json "admin-user-$ALIAS.json"
+ADMIN_USERNAME="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["result"]["username"])' "admin-user-$ALIAS.json")"
+if [ -z "$ADMIN_USERNAME" ]; then
+  echo "Could not resolve the admin username for org $ALIAS. Stopping." >&2
+  exit 1
+fi
+ESCAPED_ADMIN="$(printf '%s' "$ADMIN_USERNAME" | sed "s/'/''/g")"
+run_step "list admin assignments for $ADMIN_USERNAME" "permset-query-$ALIAS.json" \
+  sf data query -o "$ALIAS" \
+  -q "SELECT PermissionSet.Name FROM PermissionSetAssignment WHERE Assignee.Username = '$ESCAPED_ADMIN'" \
+  --json
+verify_step assignment-list "permset-query-$ALIAS.json"
+if verify_step assignment-query "permset-query-$ALIAS.json" --expect Agentforce_Foundry_Service 2>/dev/null; then
+  echo "Permission set Agentforce_Foundry_Service already assigned to $ADMIN_USERNAME."
+else
+  if run_step "assign permission set" "permset-$ALIAS.json" \
+    sf org assign permset -n Agentforce_Foundry_Service -o "$ALIAS" --json; then
+    verify_step json "permset-$ALIAS.json"
+  elif python3 scripts/verify_sf_output.py permset-duplicate "permset-$ALIAS.json" 2>/dev/null; then
+    echo "Permission set Agentforce_Foundry_Service already assigned to $ADMIN_USERNAME (duplicate on assign)."
+  else
+    echo "FAILED: assign permission set is not a duplicate. Output kept in permset-$ALIAS.json." >&2
+    exit 1
+  fi
+  run_step "confirm admin assignments for $ADMIN_USERNAME" "permset-confirm-$ALIAS.json" \
+    sf data query -o "$ALIAS" \
+    -q "SELECT PermissionSet.Name FROM PermissionSetAssignment WHERE Assignee.Username = '$ESCAPED_ADMIN'" \
+    --json
+  verify_step assignment-query "permset-confirm-$ALIAS.json" --expect Agentforce_Foundry_Service
+fi
 
 echo "Step 4 of 8: establish the agent runtime user (create or verify)"
 ORG_ALIAS="$ALIAS" bash "$SCRIPT_DIR/setup-agent-user.sh"
