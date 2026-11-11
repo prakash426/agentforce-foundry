@@ -111,20 +111,23 @@ captures stayed local and uncommitted.
 
 ## Addendum: acceptance-failure fixes, offline verification
 
-Branch `foundry-features/bug-fixes` into `foundry-features`, with four
-focused fix branches merged in order. No org was touched; no version
-was published, activated, or deployed from this work. Live retest is
+Branch `bug-fixes` (from `foundry-features`) into `foundry-features`,
+with four focused fix branches merged in order. Fix branches share
+the `bug-fixes-` prefix and parentage for grouping; git refs cannot
+nest a branch under another branch name, so `bug-fixes/01-...` style
+nesting was not possible. No org was touched; no version was
+published, activated, or deployed from this work. Live retest is
 pending user authorization after independent review.
 
 Fix commits:
 - 3027d61 admin permset idempotency
-  (`foundry-features/bug-fixes-01-admin-permset`).
+  (`bug-fixes-01-admin-permset`).
 - 0e7504f dual retrieval layouts
-  (`foundry-features/bug-fixes-02-metadata-layout`).
+  (`bug-fixes-02-metadata-layout`).
 - cec29a8 deterministic scoring plus exact outputs
-  (`foundry-features/bug-fixes-03-triage-execution`).
+  (`bug-fixes-03-triage-execution`).
 - de97952 honest limits plus override preservation
-  (`foundry-features/bug-fixes-04-honest-responses`).
+  (`bug-fixes-04-honest-responses`).
 
 Offline verification on the merged integration tree plus docs
 (run 2026-11-11 19:22 UTC, all exit zero):

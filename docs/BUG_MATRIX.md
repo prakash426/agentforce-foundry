@@ -35,7 +35,7 @@ testing. Fixes are offline verified only; live retest is pending.
 - Fix: Step 3 resolves the admin username via org display, queries
   assignments, skips when present, otherwise assigns plus confirms, and
   accepts a duplicate payload only on exact message match. Branch
-  `foundry-features/bug-fixes-01-admin-permset`.
+  `bug-fixes-01-admin-permset`.
 - Regression test: 6 verifier tests (assignment-list, permset-duplicate)
   plus 5 mocked setup rerun tests (existing, new, duplicate, genuine
   failure, display failure).
@@ -58,7 +58,7 @@ testing. Fixes are offline verified only; live retest is pending.
 - Fix: publish-diff, setup, CI, create-test gate, and resolver accept
   both legacy bots/vN and current aiAgentDefinitionVersions/Agent#N
   layouts with version verification. No API version branching. Branch
-  `foundry-features/bug-fixes-02-metadata-layout`.
+  `bug-fixes-02-metadata-layout`.
 - Regression test: 4 resolver layout tests plus 3 publish-diff layout
   tests plus updated fake publisher fixtures.
 - Offline result: pass (16 resolver, 47 verifier green).
@@ -82,7 +82,7 @@ testing. Fixes are offline verified only; live retest is pending.
   collect_details maps the conversation, a logic run of
   triage_service_case fires once with those values and stores outcome,
   priority, queue, reason. Replies require a current result. Branch
-  `foundry-features/bug-fixes-03-triage-execution`.
+  `bug-fixes-03-triage-execution`.
 - Regression test: structural harness markers, 2 new Apex uncertainty
   tests, eval flows svc-flow-06 and svc-flow-07, 2 preview sequences.
   Static checks cannot prove live execution.
@@ -130,7 +130,7 @@ testing. Fixes are offline verified only; live retest is pending.
   example.
 - Fix: escalation rewrite with plain limits and no contact, review,
   handling, waiting, or delivered-details language. Fixed examples in
-  both READMEs. Branch `foundry-features/bug-fixes-04-honest-responses`.
+  both READMEs. Branch `bug-fixes-04-honest-responses`.
 - Regression test: response-contract static checks plus eval scenario
   svc-esc-03 with the exact input.
 - Offline result: pass (4 contract tests green).
