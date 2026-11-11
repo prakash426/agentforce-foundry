@@ -1,0 +1,41 @@
+{
+  "fixture": "service-triage-turns",
+  "note": "Sequential preview scripts mirroring the five catalog flows. Each sequence runs in one preview session so the agent produces every reply. expect_any entries are substring smoke checks against agent replies, not semantic proof. The word suggested is mandated by agent instructions; other entries may need tuning after the first measured run.",
+  "sequences": [
+    {
+      "name": "help-to-triage",
+      "turns": [
+        {"utterance": "Help"},
+        {"utterance": "Checkout is down everywhere, registers frozen since 9am", "expect_any": ["suggested"]}
+      ]
+    },
+    {
+      "name": "triage-to-human",
+      "turns": [
+        {"utterance": "Checkout is down everywhere", "expect_any": ["suggested"]},
+        {"utterance": "I want to talk to a human about this outage", "expect_any": ["human"]}
+      ]
+    },
+    {
+      "name": "triage-to-offtopic",
+      "turns": [
+        {"utterance": "Checkout is down at our store", "expect_any": ["suggested"]},
+        {"utterance": "Who won the world cup last year"}
+      ]
+    },
+    {
+      "name": "billing-then-outage",
+      "turns": [
+        {"utterance": "Where is my refund for the March invoice", "expect_any": ["suggested"]},
+        {"utterance": "Forget billing. Checkout is down everywhere now", "expect_any": ["suggested", "High"]}
+      ]
+    },
+    {
+      "name": "uncertain-signals",
+      "turns": [
+        {"utterance": "Registers look slow, is checkout down?"},
+        {"utterance": "Not sure, might be down at two stores", "expect_any": ["human"]}
+      ]
+    }
+  ]
+}

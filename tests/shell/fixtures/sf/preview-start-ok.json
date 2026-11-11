@@ -1,0 +1,8 @@
+{
+  "status": 0,
+  "result": {
+    "sessionId": "sess-001",
+    "agentApiName": "Service_Triage_Agent"
+  },
+  "warnings": []
+}

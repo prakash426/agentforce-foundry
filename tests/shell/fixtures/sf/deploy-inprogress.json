@@ -1,0 +1,11 @@
+{
+  "status": 0,
+  "result": {
+    "id": "0Af000000000004",
+    "status": "InProgress",
+    "success": false,
+    "done": false,
+    "checkOnly": true
+  },
+  "warnings": []
+}

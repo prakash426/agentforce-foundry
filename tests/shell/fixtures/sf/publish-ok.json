@@ -1,0 +1,18 @@
+{
+  "status": 0,
+  "result": {
+    "success": true,
+    "botDeveloperName": "Service_Triage_Agent",
+    "retrievedComponents": [
+      "Bot Service_Triage_Agent"
+    ],
+    "deployedComponents": [
+      "AiAuthoringBundle Service_Triage_Agent"
+    ],
+    "summary": {
+      "retrieved": 4,
+      "deployed": 1
+    }
+  },
+  "warnings": []
+}

@@ -1,0 +1,18 @@
+{
+  "status": 0,
+  "result": {
+    "userId": "005000000000002",
+    "username": "agent.user.def456@example.com",
+    "profileId": "00e000000000001",
+    "permissionSetsAssigned": [
+      "AgentforceServiceAgentBase"
+    ],
+    "permissionSetErrors": [
+      {
+        "permissionSet": "AgentforceServiceAgentUser",
+        "error": "not found"
+      }
+    ]
+  },
+  "warnings": []
+}
