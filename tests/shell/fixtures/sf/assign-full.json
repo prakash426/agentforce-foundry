@@ -1,0 +1,30 @@
+{
+  "status": 0,
+  "result": {
+    "records": [
+      {
+        "PermissionSet": {
+          "Name": "AgentforceServiceAgentBase"
+        }
+      },
+      {
+        "PermissionSet": {
+          "Name": "AgentforceServiceAgentUser"
+        }
+      },
+      {
+        "PermissionSet": {
+          "Name": "EinsteinGPTPromptTemplateUser"
+        }
+      },
+      {
+        "PermissionSet": {
+          "Name": "Agentforce_Foundry_Service"
+        }
+      }
+    ],
+    "totalSize": 4,
+    "done": true
+  },
+  "warnings": []
+}
