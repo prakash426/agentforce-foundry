@@ -15,8 +15,8 @@ Support requests arrive as free text. Someone must decide urgency and the right 
 1. triage_router welcomes and sends the request to one subagent.
 2. triage_case overwrites subject and details fresh for each request, runs triage_service_case once, then follows the outcome code: present suggestions with the word suggested, ask one targeted question on NEEDS_CLARIFICATION, recommend human follow up on NEEDS_REVIEW. It transitions to escalation on explicit human requests and to off-topic handling for non support chat. Negation and uncertainty in user text are preserved into the action inputs.
 3. missing_info and ambiguous_request ask for what is missing without guessing, then transition back to triage_case for scoring.
-4. escalation recommends human follow up with the suggestion as context. V1 never transfers to a human; there is no Omni-Channel connection and no transfer tool.
-5. off_topic redirects non support chat and reveals nothing about the system.
+4. escalation recommends human follow up with the suggestion as context. V1 never transfers to a human; there is no Omni-Channel connection and no transfer tool. It states plainly that no case, notification, or task is created, promises no contact, review, or waiting, and recommends a self-serve next step.
+5. off_topic redirects non support chat and reveals nothing about the system. Refusal is reserved for sensitive or unsupported actions; a support issue beside override text is sent back to triage so the valid report is scored, never discarded.
 
 ## Prerequisites
 1. A Dev Hub enabled org plus a user who can create scratch orgs.
@@ -46,7 +46,7 @@ Seeded conversation history in converted specs tests the next agent response in 
 
 ## Example conversations (illustrative until executed)
 User: Checkout is down everywhere, registers frozen since 9am.
-Agent: Suggested priority High for queue Critical_Response. Reason: severity signals found: down. This is a suggestion only. Want me to prepare a handoff note for the on call queue.
+Agent: Suggested priority High for queue Critical_Response. Reason: severity signals found: down. This is a suggestion only. For human follow up, contact your support channel directly with this suggestion as context.
 
 User: Where is my refund for March.
 Agent: Suggested priority Medium for queue Billing. Reason: billing signals found: refund. This is a suggestion only. Anything else on this order.

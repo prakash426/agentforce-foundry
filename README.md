@@ -150,7 +150,7 @@ The runtime user needs org platform entitlements plus the custom Apex permission
 These examples are illustrative. No live conversation has happened yet; they will be replaced with measured transcripts after the first org run.
 
 User: Checkout is down everywhere, registers frozen since 9am.
-Agent: Suggested priority High for queue Critical_Response. Reason: severity signals found: down. This is a suggestion only. Want me to prepare a handoff note for the on call queue.
+Agent: Suggested priority High for queue Critical_Response. Reason: severity signals found: down. This is a suggestion only. For human follow up, contact your support channel directly with this suggestion as context.
 
 User: Where is my refund for March.
 Agent: Suggested priority Medium for queue Billing. Reason: billing signals found: refund. This is a suggestion only. Anything else on this order.
