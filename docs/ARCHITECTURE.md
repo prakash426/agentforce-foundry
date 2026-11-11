@@ -4,17 +4,17 @@
 A support team adopting Agentforce needs a triage starter they can read end to end: what the agent does, what the Apex action guarantees, how it is tested, and how to deploy it. Foundry answers with one complete Service Triage slice instead of three shallow demos.
 
 ## Design
-Service Triage is recommendation only in v1. The agent collects request text, calls one invocable Apex action, and presents a suggested priority and queue with a reason. Nothing is created, updated, assigned, or routed in v1. Suggestions are labels, not completed operations.
+Service Triage is recommendation only in v1. The router clears triage state each turn, the agent collects request text, a deterministic logic step runs one invocable Apex action once, and the reply presents the stored result with exact values. Nothing is created, updated, assigned, or routed in v1. Suggestions are labels, not completed operations. No classification is presented without a current scoring result.
 
-Conversation → triage_router → triage_case → ServiceTriageAction → suggestion plus reason
+Conversation → triage_router (clear state) → triage_case → collect_details → deterministic ServiceTriageAction run → suggestion plus reason
 Conversation → triage_router → missing_info → one clarifying question → back to triage_case
 Conversation → triage_router → ambiguous_request → one clarifying question → back to triage_case
-Conversation → triage_case → escalation → human follow up recommendation (no transfer in v1)
-Conversation → triage_case → off_topic → polite redirect
+Conversation → triage_case → escalation → honest human follow up recommendation (no transfer, no promises in v1)
+Conversation → triage_case → off_topic → polite redirect (support issues beside override text return to triage)
 Conversation → triage_router → escalation or off_topic directly for explicit human requests and non support chat
 
 ## Components
-1. Service_Triage_Agent.agent: Agent Script blueprint modeled on the official Local Info Agent sample. Holds system rules, router, five subagents with transitions, and the action binding to apex://ServiceTriageAction with input and output mappings.
+1. Service_Triage_Agent.agent: Agent Script blueprint modeled on the official Local Info Agent sample. Holds system rules, a state-clearing router, five subagents with transitions, deterministic scoring logic that runs apex://ServiceTriageAction once per turn with stored outputs, and exact-value presentation rules.
 2. ServiceTriageAction.cls: deterministic classifier. Word based severity signals, clause scoped negation with contraction handling, conflict and uncertainty detection, documented input limits, stable outcome codes. No queries, no DML.
 3. Agentforce_Foundry_Service permission set: grants Apex class access for the agent runtime user.
 4. Scenario catalog: seventeen Service scenarios across normal, ambiguous, adversarial, out of scope, and escalation classes with expected Apex outcomes, expected agent behavior, and five multi-turn flows.
@@ -37,7 +37,7 @@ Publishing requires a valid runtime user first. The setup creates one with the s
 Customer text is treated as data. The agent script carries explicit disregard override rules. The Apex action has no tools to abuse: override style phrases beside a severity signal force NEEDS_REVIEW, and alone they are inert. No credentials are committed. CI authentication uses a protected secret that never runs for fork pull requests.
 
 ## Kit maturity
-1. Service Triage: starter complete, pending first org validation (deploy, Apex run, agent eval).
+1. Service Triage: starter complete. Version 1 reached an org but failed acceptance testing; fixes are offline verified and pending staged retest.
 2. Sales Qualification: Apex action plus tests plus permission set. Agent script and eval pending.
 3. Internal Help: Apex action plus tests plus permission set. Agent script and eval pending.
 

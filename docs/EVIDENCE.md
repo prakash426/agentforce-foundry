@@ -108,3 +108,54 @@ captures stayed local and uncommitted.
    docs/MANUAL_ORG_TEST.md, then activate, preview, and evaluate. The
    rerun should reuse the created runtime user through `AGENT_USER` to
    avoid duplicates.
+
+## Addendum: acceptance-failure fixes, offline verification
+
+Branch `foundry-features/bug-fixes` into `foundry-features`, with four
+focused fix branches merged in order. No org was touched; no version
+was published, activated, or deployed from this work. Live retest is
+pending user authorization after independent review.
+
+Fix commits:
+- 3027d61 admin permset idempotency
+  (`foundry-features/bug-fixes-01-admin-permset`).
+- 0e7504f dual retrieval layouts
+  (`foundry-features/bug-fixes-02-metadata-layout`).
+- cec29a8 deterministic scoring plus exact outputs
+  (`foundry-features/bug-fixes-03-triage-execution`).
+- de97952 honest limits plus override preservation
+  (`foundry-features/bug-fixes-04-honest-responses`).
+
+Offline verification on the merged integration tree plus docs
+(run 2026-11-11 19:22 UTC, all exit zero):
+- validate_kits.py ok, including deterministic scoring markers.
+- test_validate_kits.py: 24 tests ok.
+- audit_service_scenarios.py ok on 20 scenarios.
+- test_agent_eval_tools.py: 39 tests ok.
+- test_resolve_eval_metadata.py: 16 tests ok (both layouts).
+- test_response_contract.py: 4 tests ok.
+- test_verify_sf_output.py: 47 tests ok.
+- test_script_failure_modes.py: 35 tests ok.
+- Python total: 165 tests passing.
+- Bash syntax checks on all org scripts plus helpers plus fake CLI.
+- Catalog converts to 20 cases; resolver reports layout per candidate.
+- No double hyphens in prose (verified by scan).
+
+Apex: 27 tests committed (25 prior plus 2 uncertainty). Source checks
+ran offline only; org execution of the 2 new tests is pending. No
+Python copy of Apex logic was substituted for execution.
+
+Live retest pending: staged existing-org procedure in
+docs/MANUAL_ORG_TEST.md with checkpoints for setup rerun, action
+invocation traces, exact reply values, honest limits, uncertainty,
+and override handling. Transcripts and trace evidence must be
+preserved with the run record. See docs/BUG_MATRIX.md for the
+bug-to-regression map. Old Version 1 conversation behavior is failed
+acceptance testing; nothing here claims org verification of fixes.
+
+Remaining limitations: deterministic Agent Script logic follows
+documented semantics but has not compiled server side; the rewritten
+bundle shape awaits first validate. Publish JSON carries no version,
+so candidate identity still rests on retrieval diff plus resolver
+report plus recorded activation. Custom JSONPath evaluations ship
+empty. Legacy results expose subject but not version.

@@ -131,6 +131,51 @@ USE_EXISTING_ORG=1 ORG_ALIAS=my-dev-org AGENT_USER=<earlier-username> bash scrip
 5. Record the trio after every setup: commit SHA, candidate version,
    runtime username mode (created or existing).
 
+## Staged retest in the existing org
+
+Use this after the Version 1 acceptance failures. It reuses the tested
+org and its runtime user; it publishes a new candidate version for the
+fixed bundle. Do not run this without explicit authorization to touch
+the org. Deploy, compile, publish, Apex execution, activation, preview,
+and evaluation stay separate stages with their own checkpoints.
+
+Stage 1, setup rerun. Reuse the existing runtime user:
+
+```sh
+USE_EXISTING_ORG=1 ORG_ALIAS=my-dev-org AGENT_USER=<earlier-username> bash scripts/setup-service-triage.sh
+```
+
+Checkpoints: Step 3 reports already assigned for the admin set instead
+of failing; Step 4 verifies the existing user without creating a
+duplicate; validation completes; publish prints a new candidate
+version found from the actual retrieval layout; Apex runs 27 tests.
+
+Stage 2, activate and preview. Activate the new candidate, then run
+the scripted preview and keep every transcript:
+
+```sh
+sf agent activate -n Service_Triage_Agent --version N -o my-dev-org --json
+ORG_ALIAS=my-dev-org bash scripts/preview-service-triage-turns.sh
+```
+
+Checkpoints per turn: the trace shows triage_service_case invoked with
+current inputs before any classification reply; replies carry exact
+values (High with Critical_Response, Medium with Billing, Low with
+General_Support) or omit fields on NEEDS codes; transfer requests
+state limits with no promises; uncertain turns preserve unknown
+impact; override turns score the valid issue.
+
+Stage 3, evaluate. Convert, resolve against the new candidate,
+create, run, and score:
+
+```sh
+ORG_ALIAS=my-dev-org AGENT_VERSION=N RUN_TEST=1 bash scripts/create-service-triage-test.sh
+```
+
+Checkpoints: resolver reports the new layout and candidate; the
+checker passes with commit, version, and run id recorded; transcripts
+and structured trace evidence are preserved with the record.
+
 ## Activate one version
 
 Publishing leaves the version inactive. Activation is an explicit manual
@@ -238,4 +283,7 @@ sf org delete scratch -o foundry-triage
 
 Leave the working tree free of run outputs before committing: per step
 JSON captures, `.err` sidecars, `ci-results`, `agent-results`,
-`preview-transcripts`, and `specs` are local only.
+`preview-transcripts`, and `specs` are local only. Never commit local
+usernames, generated metadata containing org-specific values (retrieved
+version directories, graph blobs), credentials, auth URLs, or run
+outputs. The agent file must show the placeholder before every commit.

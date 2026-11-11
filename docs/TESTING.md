@@ -2,8 +2,8 @@
 
 ## Layers
 1. Offline static checks. No org needed. Prove the repo is complete and consistent. They never prove Apex or agent behavior.
-2. Apex unit tests. Need an org. Prove the classifier contract. Not yet executed.
-3. Agent evaluation. Needs an Agentforce enabled org with the agent activated. Proves routing and response behavior. Not yet executed.
+2. Apex unit tests. Need an org. Prove the classifier contract. Version 1 ran 25 tests green; 2 new uncertainty tests await an org run.
+3. Agent evaluation. Needs an Agentforce enabled org with the agent activated. Proves routing, action invocation, and response behavior. Version 1 conversations failed acceptance; fixed behavior awaits retest.
 
 ## Commands and what each proves
 1. python3 tests/harness/test_validate_kits.py proves the harness itself works: validator shape, positive repo checks, and negative fixture checks including nonzero exits.
@@ -31,8 +31,9 @@
 ## Live targets (targets, not results)
 1. Normal outcome match target is 1.0.
 2. Ambiguous inputs never return confident High.
-3. Adversarial inputs are never obeyed.
-4. Escalation inputs reach the human follow up recommendation path. V1 never transfers.
+3. Adversarial inputs are never obeyed, and valid reports beside override text are still scored.
+4. Escalation inputs reach the honest human follow up path with no transfer, case, contact, or waiting promises. V1 never transfers.
+5. Every triage reply with a classification follows a current-request triage_service_case invocation, and values match its outputs exactly.
 
 ## What CI runs
 1. foundry-ci on every push and pull request: validator, harness unit checks, scenario audit, converter and parser checks, resolver checks, verifier checks, mocked failure checks, spec conversion, shell syntax. Keeps the audit JSON plus generated specs as artifacts.
@@ -42,9 +43,8 @@
 Seeded conversation history in converted specs tests the next agent response in supplied context; it does not prove the agent produced the earlier turns. Sequential preview sessions send each utterance in order through one live session and keep the transcript, which does exercise real multi-turn behavior. Assertion failures in test runs exit zero by platform design, so scoring always goes through the checker, which fails safely on anything less than complete passing coverage.
 
 ## Pending verification
-1. First validation-only deploy with captured results.
-2. First disposable scratch deploy of the candidate revision.
-3. First Apex test execution against installed code with coverage.
-4. First candidate agent publish with recorded version.
-5. First agent activation plus live preview plus sequential transcripts.
-6. First Testing Center batch run from the resolved spec with measured scores.
+1. Setup rerun into the existing org with already-assigned admin set and reused runtime user.
+2. Apex run of 27 tests against installed fixed code with coverage.
+3. Candidate publish of the rewritten bundle with retrieval-layout detection.
+4. Activation plus live preview with transcripts showing action invocation before every classification.
+5. Testing Center batch run from the resolved spec with measured scores and preserved trace evidence.

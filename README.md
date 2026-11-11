@@ -29,29 +29,29 @@ Boundaries: no record writes, no real human transfer (v1 has no messaging connec
 
 | Kit | Apex action plus tests | Permission set | Agent bundle | Scenario catalog | Org execution |
 | --- | --- | --- | --- | --- | --- |
-| Service Triage | Ready, 25 tests committed | Ready | Ready, transitions included | Ready, 17 scenarios plus 5 flows | Pending first org run |
+| Service Triage | Ready, 27 tests committed | Ready | Ready, deterministic scoring | Ready, 20 scenarios plus 7 flows | Version 1 failed acceptance; fixes pending retest |
 | Sales Qualification | Ready | Ready | Pending | Legacy sample only | Pending |
 | Internal Help | Ready | Ready | Pending | Legacy sample only | Pending |
 
-Service Triage is the complete starter. Sales and Internal Help ship working Apex actions while their agent integration is still pending.
+Service Triage is the complete starter. Sales and Internal Help ship working Apex actions while their agent integration is still pending. The first live Version 1 conversation behavior failed acceptance testing (fabricated classifications, no action execution, false follow-up promises); see [bug matrix](docs/BUG_MATRIX.md). Fixes in this branch are offline verified only and await staged retest in the existing org.
 
 ## Architecture
 
 ```text
 User message
     |
-triage_router (welcome plus route)
+triage_router (clear state, welcome plus route)
     |            |                 |               |              |
 triage_case  missing_info  ambiguous_request  escalation     off_topic
-    |         (ask once,      (ask once,       (recommend     (redirect,
-    |          back to         back to          human          no triage
-    |          triage)         triage)          follow up)     result)
+    |         (ask once,      (ask once,       (honest        (redirect,
+    |          back to         back to          limits,        no triage
+    |          triage)         triage)          no promises)   result)
     v
-ServiceTriageAction (Apex, invocable)
+collect_details, then deterministic ServiceTriageAction run
     |
-SUGGESTED (priority plus queue plus reason)
-NEEDS_CLARIFICATION (one targeted question)
-NEEDS_REVIEW (human follow up recommendation)
+SUGGESTED (exact priority plus queue plus reason)
+NEEDS_CLARIFICATION (one targeted question, no fields)
+NEEDS_REVIEW (honest human recommendation, no fields)
 ```
 
 Details live in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
@@ -178,7 +178,8 @@ CI runs every offline layer on each push and pull request, plus honest org gated
 ## Guides and evidence
 
 - [Evidence record](docs/EVIDENCE.md): verified commits, commands, CI links, and pending layers.
-- [Manual org test guide](docs/MANUAL_ORG_TEST.md): hands on procedure for the first live run.
+- [Bug matrix](docs/BUG_MATRIX.md): acceptance failures mapped to fixes, regressions, and retest status.
+- [Manual org test guide](docs/MANUAL_ORG_TEST.md): hands on procedure for the first live run plus staged retest.
 - [Merge order](docs/MERGE_ORDER.md): branch flow and conflict avoidance.
 - [Testing guide](docs/TESTING.md): layers, thresholds, and CI behavior.
 - [Service kit guide](kits/service-triage/README.md): contract, setup, verification, and troubleshooting.
@@ -186,8 +187,8 @@ CI runs every offline layer on each push and pull request, plus honest org gated
 
 ## Known limitations
 
-- No org execution has happened yet: Apex runs, deployment, publishing, activation, preview, and agent evaluation are all pending a first authorized org.
-- Agent bundle syntax follows official template patterns and locally verified command shapes but has never compiled server side.
+- Version 1 reached an org (deploy, user setup, validation, publish, 25 Apex tests, activation) but its conversations failed acceptance testing. The fixes here are offline verified only; no fix is org verified before retesting.
+- The rewritten agent bundle uses deterministic logic plus prompt instructions following documented Agent Script semantics, but the new shape has not compiled server side yet.
 - Queue labels are suggestions, never validated against any org.
 - Negation and uncertainty word lists are heuristics; measured runs may require tuning.
 - Converter topic and action names resolve against retrieved metadata; custom JSONPath evaluations ship empty until a first verbose run.
