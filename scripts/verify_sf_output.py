@@ -244,8 +244,7 @@ def cmd_publish_diff(args):
   def versions(names):
     found = set()
     for token in names:
-      match = re.match(r"v(\d+)\b", token)
-      if match:
+      for match in re.finditer(r"(?:^v|#)(\d+)\b", token):
         found.add(int(match.group(1)))
     return found
   new_versions = sorted(versions(after) - versions(before))

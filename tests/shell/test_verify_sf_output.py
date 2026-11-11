@@ -253,6 +253,39 @@ class PublishDiffTest(unittest.TestCase):
       after.write_text("v1\nv2\n")
       self.assertEqual(1, run("publish-diff", str(before), str(after))[0])
 
+  def test_hash_layout_new_version(self):
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+      before = Path(tmp) / "before.txt"
+      after = Path(tmp) / "after.txt"
+      before.write_text("Service_Triage_Agent#1\nService_Triage_Agent#2\n")
+      after.write_text("Service_Triage_Agent#1\nService_Triage_Agent#2\nService_Triage_Agent#3\n")
+      code, out, _ = run("publish-diff", str(before), str(after))
+      self.assertEqual(0, code)
+      self.assertEqual("v3", out)
+
+  def test_mixed_layouts_new_version(self):
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+      before = Path(tmp) / "before.txt"
+      after = Path(tmp) / "after.txt"
+      before.write_text("v1.botVersion-meta.xml\nv2.botVersion-meta.xml\nService_Triage_Agent#1\nService_Triage_Agent#2\n")
+      after.write_text("v1.botVersion-meta.xml\nv2.botVersion-meta.xml\nService_Triage_Agent#1\nService_Triage_Agent#2\nService_Triage_Agent#3\n")
+      code, out, _ = run("publish-diff", str(before), str(after))
+      self.assertEqual(0, code)
+      self.assertEqual("v3", out)
+
+  def test_missing_retrieval_rejected(self):
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+      before = Path(tmp) / "before.txt"
+      after = Path(tmp) / "after.txt"
+      before.write_text("")
+      after.write_text("")
+      code, _, err = run("publish-diff", str(before), str(after))
+      self.assertEqual(1, code)
+      self.assertIn("none", err)
+
 
 class AssignmentListTest(unittest.TestCase):
   def test_full_lists_custom(self):

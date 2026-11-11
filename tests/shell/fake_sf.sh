@@ -95,8 +95,11 @@ if [ -n "${SF_STDERR_WARN:-}" ]; then
   echo "$SF_STDERR_WARN" >&2
 fi
 if [ "$key" = "publish" ]; then
-  mkdir -p "force-app/main/default/bots/Service_Triage_Agent"
-  echo "<BotVersion/>" > "force-app/main/default/bots/Service_Triage_Agent/v3.botVersion-meta.xml"
+  mkdir -p "force-app/main/default/aiAgentDefinitionVersions/Service_Triage_Agent#3"
+  printf '%s\n' '<AiAgentDefinitionVersion xmlns="http://soap.sforce.com/2006/04/metadata">' \
+    '<genAiPlannerName>Service_Triage_Agent_v3</genAiPlannerName><version>3</version>' \
+    '</AiAgentDefinitionVersion>' \
+    > "force-app/main/default/aiAgentDefinitionVersions/Service_Triage_Agent#3/Service_Triage_Agent#3.aiAgentDefinitionVersion-meta.xml"
 fi
 if [ "$key" = "assign" ]; then
   if [ "${SF_ASSIGN_MODE:-}" = "duplicate" ]; then

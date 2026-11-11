@@ -35,6 +35,13 @@ def make_project(tmp):
   (bots / "v2.botVersion-meta.xml").write_text(
     "<BotVersion><conversationDefinitionPlanners><genAiPlannerName>PlannerV2</genAiPlannerName>"
     "</conversationDefinitionPlanners></BotVersion>")
+  versions = proj / "force-app/main/default/aiAgentDefinitionVersions"
+  for num in ("1", "2"):
+    vdir = versions / ("Service_Triage_Agent#%s" % num)
+    vdir.mkdir(parents=True, exist_ok=True)
+    (vdir / ("Service_Triage_Agent#%s.aiAgentDefinitionVersion-meta.xml" % num)).write_text(
+      '<AiAgentDefinitionVersion><genAiPlannerName>Planner%s</genAiPlannerName>'
+      '<version>%s</version></AiAgentDefinitionVersion>' % (num, num))
   bundle = proj / "force-app/main/default/genAiPlannerBundles"
   bundle.mkdir(parents=True, exist_ok=True)
   links = "".join("<localTopicLinks><genAiPluginName>%s</genAiPluginName></localTopicLinks>" % n

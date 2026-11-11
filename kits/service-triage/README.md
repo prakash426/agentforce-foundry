@@ -72,7 +72,7 @@ Agent: I can triage this once I know more. What is the issue, and who or what is
 3. Validation or publish fails on the agent bundle: confirm the scratch definition includes the agent platform settings from config/project-scratch-def.json, then read the compiler error location in the json output.
 4. Apex tests fail: run the single class with junit output and read the first failing assertion.
 5. Agent preview shows no action: confirm the custom permission set on the runtime user plus agent activation, then retry.
-6. Resolver fails on a name: confirm the selected agent version exists and its planner references the expected topic or action. Names from another agent or version are rejected by design.
+6. Resolver fails on a name: confirm the selected agent version exists in either retrieval layout and its planner references the expected topic or action. Names from another agent or version are rejected by design.
 
 ## Cleanup
 Delete the scratch org when finished so the trial allocation is released.

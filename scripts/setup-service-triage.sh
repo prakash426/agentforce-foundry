@@ -122,13 +122,20 @@ run_step "validate authoring bundle" "validate-$AGENT_API_NAME.json" \
 verify_step agent-validate "validate-$AGENT_API_NAME.json"
 
 echo "Step 6 of 8: publish a candidate agent version (stays inactive until activated)"
-ls "force-app/main/default/bots/$AGENT_API_NAME" > "publish-before-$AGENT_API_NAME.txt" 2>/dev/null || true
+echo "Publish output carries no version number, so the candidate is found from retrieval diff."
+{
+  ls "force-app/main/default/bots/$AGENT_API_NAME" 2>/dev/null || true
+  ls "force-app/main/default/aiAgentDefinitionVersions" 2>/dev/null || true
+} > "publish-before-$AGENT_API_NAME.txt"
 run_step "publish authoring bundle" "publish-$AGENT_API_NAME.json" \
   sf agent publish authoring-bundle -n "$AGENT_API_NAME" -o "$ALIAS" --json
 verify_step agent-publish "publish-$AGENT_API_NAME.json"
-ls "force-app/main/default/bots/$AGENT_API_NAME" > "publish-after-$AGENT_API_NAME.txt"
+{
+  ls "force-app/main/default/bots/$AGENT_API_NAME" 2>/dev/null || true
+  ls "force-app/main/default/aiAgentDefinitionVersions" 2>/dev/null || true
+} > "publish-after-$AGENT_API_NAME.txt"
 CANDIDATE_VERSION="$(verify_step publish-diff "publish-before-$AGENT_API_NAME.txt" "publish-after-$AGENT_API_NAME.txt")"
-echo "Candidate agent version: $CANDIDATE_VERSION"
+echo "Candidate agent version: $CANDIDATE_VERSION (retrieval diff; publish JSON carries no version)"
 echo "$CANDIDATE_VERSION" > "candidate-version-$AGENT_API_NAME.txt"
 
 restore_agent_file

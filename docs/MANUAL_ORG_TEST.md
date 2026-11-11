@@ -25,7 +25,7 @@ behavior good.
 
 ## Prerequisites
 
-1. This branch checked out: `feature/service-triage-complete`.
+1. Current `main` checked out (the Service Triage work is merged; the old `feature/service-triage-complete` branch is stale).
 2. Salesforce CLI 2.157.8 or newer. The agent lifecycle commands
    (validate, publish, activate, preview sessions) do not exist on older
    CLIs; 2.145.6 was proven to lack them. The setup script checks this
@@ -222,8 +222,9 @@ limit in every evaluation record.
    definition in config/project-scratch-def.json carries the agent
    platform settings, then read the compiler location in the JSON.
 6. Resolver rejects a name: confirm the `AGENT_VERSION` value and that
-   publish retrieval exists locally. Names from another agent or version
-   are rejected by design.
+   publish retrieval exists locally in either `force-app/main/default/bots`
+   or `force-app/main/default/aiAgentDefinitionVersions`. Names from
+   another agent or version are rejected by design.
 7. Preview shows no action: confirm the custom permission set on the
    runtime user plus activation, then retry.
 
