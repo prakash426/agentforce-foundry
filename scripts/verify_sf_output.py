@@ -28,6 +28,10 @@ verified against installed plugin sources:
   and all three platform permission sets assigned.
 - user-query: exactly one active user record with the expected profile.
 - assignment-query: permission set assignments covering expected names.
+- assignment-list: permission set assignment query shape check that prints
+  found names without requiring any, so callers can branch on membership.
+- permset-duplicate: true only when a permset assign payload carries a
+  Duplicate PermissionSetAssignment failure; all other shapes fail.
 - json: generic oclif envelope with top-level status zero.
 
 Usage: python3 scripts/verify_sf_output.py <subcommand> <file> [options]
@@ -413,6 +417,41 @@ def cmd_assignment_query(args):
   return 0
 
 
+def cmd_assignment_list(args):
+  if len(args) != 1:
+    return fail("usage: assignment-list <file>")
+  data = load(args[0])
+  if data is None:
+    return 1
+  result = unwrap(data)
+  if not isinstance(result, dict) or not isinstance(result.get("records"), list):
+    return fail("assignment query output has no records list")
+  found = set()
+  for record in result["records"]:
+    permset = record.get("PermissionSet", {}) if isinstance(record, dict) else {}
+    if isinstance(permset, dict) and permset.get("Name"):
+      found.add(permset["Name"])
+  print("assignment-list found=%s" % ",".join(sorted(found)))
+  return 0
+
+
+def cmd_permset_duplicate(args):
+  if len(args) != 1:
+    return fail("usage: permset-duplicate <file>")
+  data = load(args[0])
+  if data is None:
+    return 1
+  result = unwrap(data)
+  if not isinstance(result, dict) or not isinstance(result.get("failures"), list):
+    return fail("permset output has no failures list")
+  for failure in result["failures"]:
+    message = failure.get("message", "") if isinstance(failure, dict) else ""
+    if "Duplicate PermissionSetAssignment" in message:
+      print("permset-duplicate already-assigned")
+      return 0
+  return fail("permset output is not a duplicate assignment")
+
+
 def cmd_json(args):
   if len(args) != 1:
     return fail("usage: json <file>")
@@ -438,6 +477,8 @@ COMMANDS = {
   "agent-user-create": cmd_agent_user_create,
   "user-query": cmd_user_query,
   "assignment-query": cmd_assignment_query,
+  "assignment-list": cmd_assignment_list,
+  "permset-duplicate": cmd_permset_duplicate,
   "publish-diff": cmd_publish_diff,
   "json": cmd_json,
 }

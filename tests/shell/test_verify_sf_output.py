@@ -254,5 +254,47 @@ class PublishDiffTest(unittest.TestCase):
       self.assertEqual(1, run("publish-diff", str(before), str(after))[0])
 
 
+class AssignmentListTest(unittest.TestCase):
+  def test_full_lists_custom(self):
+    code, out, _ = run("assignment-list", str(FIX / "assign-full.json"))
+    self.assertEqual(0, code)
+    self.assertIn("Agentforce_Foundry_Service", out)
+
+  def test_thin_lists_without_custom(self):
+    code, out, _ = run("assignment-list", str(FIX / "assign-thin.json"))
+    self.assertEqual(0, code)
+    self.assertNotIn("Agentforce_Foundry_Service", out)
+
+  def test_malformed_rejected(self):
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+      bad = Path(tmp) / "bad.json"
+      bad.write_text('{"status": 0, "result": {}}')
+      code, _, err = run("assignment-list", str(bad))
+      self.assertEqual(1, code)
+      self.assertIn("no records list", err)
+
+
+class PermsetDuplicateTest(unittest.TestCase):
+  def test_duplicate_accepted(self):
+    code, out, _ = run("permset-duplicate", str(FIX / "permset-duplicate.json"))
+    self.assertEqual(0, code)
+    self.assertIn("already-assigned", out)
+
+  def test_success_rejected(self):
+    code, _, _ = run("permset-duplicate", str(FIX / "org-ok.json"))
+    self.assertEqual(1, code)
+
+  def test_genuine_failure_rejected(self):
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+      bad = Path(tmp) / "bad.json"
+      bad.write_text('{"status": 1, "result": {"successes": [], '
+                     '"failures": [{"name": "a@b.c", "message": "INVALID_OR_NULL_FOR_FIELD"}]}}')
+      code, _, err = run("permset-duplicate", str(bad))
+      self.assertEqual(1, code)
+      self.assertIn("not a duplicate", err)
+
+
 if __name__ == "__main__":
   unittest.main()

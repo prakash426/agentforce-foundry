@@ -111,16 +111,24 @@ file, and `ci-results`.
 1. Deploy, permission sets, validation, publish, and Apex tests are safe
    to rerun. Each publish creates a new candidate version; note which one
    you activate and evaluate.
-2. Org creation is the one non idempotent step. It fails if the alias
+2. Confirmed rerun issue, now fixed: setup used to stop at Step 3 on a
+   rerun with `Duplicate PermissionSetAssignment` when assigning
+   `Agentforce_Foundry_Service` to the admin. Step 3 now resolves the
+   admin username in the targeted org, queries current assignments,
+   reports already assigned and continues when present, and otherwise
+   assigns plus confirms. A duplicate response on assign is accepted
+   only when the payload carries that exact failure; all other
+   failures still stop the script.
+3. Org creation is the one non idempotent step. It fails if the alias
    exists. Delete the old org or export a new `ORG_ALIAS` and rerun.
-3. Each setup run without `AGENT_USER` creates a new runtime user. On a
+4. Each setup run without `AGENT_USER` creates a new runtime user. On a
    rerun into the same org, reuse the earlier user to avoid duplicates:
 
 ```sh
 USE_EXISTING_ORG=1 ORG_ALIAS=my-dev-org AGENT_USER=<earlier-username> bash scripts/setup-service-triage.sh
 ```
 
-4. Record the trio after every setup: commit SHA, candidate version,
+5. Record the trio after every setup: commit SHA, candidate version,
    runtime username mode (created or existing).
 
 ## Activate one version
