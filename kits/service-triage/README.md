@@ -13,7 +13,7 @@ Support requests arrive as free text. Someone must decide urgency and the right 
 
 ## Behavior map
 1. triage_router welcomes and sends the request to one subagent.
-2. triage_case overwrites subject and details fresh for each request, runs triage_service_case once, then follows the outcome code: present suggestions with the word suggested, ask one targeted question on NEEDS_CLARIFICATION, recommend human follow up on NEEDS_REVIEW. It transitions to escalation on explicit human requests and to off-topic handling for non support chat. Negation and uncertainty in user text are preserved into the action inputs.
+2. triage_case collects subject and details fresh for each request through collect_details, then a deterministic scoring step runs triage_service_case once with those values and stores the outcome, priority, queue, and reason. The router clears triage state every turn so nothing leaks across requests. The reply follows the outcome code: present exact suggested values with the word suggested, ask one targeted question on NEEDS_CLARIFICATION with no priority or queue, recommend human follow up on NEEDS_REVIEW with no priority or queue. It transitions to escalation on explicit human requests and to off-topic handling for non support chat. Negation and uncertainty in user text are preserved into the action inputs. No classification is presented without a current scoring result.
 3. missing_info and ambiguous_request ask for what is missing without guessing, then transition back to triage_case for scoring.
 4. escalation recommends human follow up with the suggestion as context. V1 never transfers to a human; there is no Omni-Channel connection and no transfer tool.
 5. off_topic redirects non support chat and reveals nothing about the system.
