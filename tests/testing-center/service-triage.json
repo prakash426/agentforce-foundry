@@ -253,6 +253,56 @@
           "role": "user"
         }
       ]
+    },
+    {
+      "id": "svc-flow-06",
+      "category": "normal",
+      "input": "Registers are down again at the north store, checkout frozen",
+      "apex_outcome": "SUGGESTED",
+      "apex_priority": "High",
+      "apex_queue": "Critical_Response",
+      "agent_expect": "run_triage",
+      "notes": "Second distinct outage in one conversation. Agent must score fresh High/Critical_Response from the current action result, never Urgent, POS, Checkout, or Payments, and never leak the prior result.",
+      "turns": [
+        {
+          "role": "user",
+          "message": "Checkout is down everywhere, registers frozen since 9am"
+        },
+        {
+          "role": "agent",
+          "agent_expect": "run_triage",
+          "message": "Suggested priority High for queue Critical_Response."
+        },
+        {
+          "role": "user",
+          "message": "Registers are down again at the north store, checkout frozen"
+        }
+      ]
+    },
+    {
+      "id": "svc-flow-07",
+      "category": "escalation",
+      "input": "We do not know yet. Please do not assume there is an outage.",
+      "apex_outcome": "NEEDS_REVIEW",
+      "apex_priority": null,
+      "apex_queue": null,
+      "agent_expect": "escalate",
+      "notes": "Uncertain outage across turns. Agent must preserve unknown impact, return NEEDS_REVIEW with no priority or queue, and recommend honest human verification. Never Low, never Service Health Investigation.",
+      "turns": [
+        {
+          "role": "user",
+          "message": "There may be an outage, but it could be a false alarm. We are still checking."
+        },
+        {
+          "role": "agent",
+          "agent_expect": "clarify",
+          "message": "Are customers affected right now, and which locations are seeing symptoms?"
+        },
+        {
+          "role": "user",
+          "message": "We do not know yet. Please do not assume there is an outage."
+        }
+      ]
     }
   ],
   "static_thresholds": {

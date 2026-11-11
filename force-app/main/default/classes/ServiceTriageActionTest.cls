@@ -64,6 +64,21 @@ private class ServiceTriageActionTest {
   }
 
   @IsTest
+  static void unknownImpactNeedsReview() {
+    ServiceTriageAction.Result res = runOne('There may be an outage', 'We do not know yet, please do not assume there is an outage');
+    System.assertEquals(ServiceTriageAction.OUTCOME_REVIEW, res.outcome);
+    System.assertEquals(null, res.priority);
+    System.assertEquals(null, res.queue);
+  }
+
+  @IsTest
+  static void dontKnowOutageNeedsReview() {
+    ServiceTriageAction.Result res = runOne('Checkout is down everywhere', 'Impact is unknown, we are still checking with stores');
+    System.assertEquals(ServiceTriageAction.OUTCOME_REVIEW, res.outcome);
+    System.assertEquals(null, res.priority);
+  }
+
+  @IsTest
   static void maintenanceContextNeedsReview() {
     ServiceTriageAction.Result res = runOne('Emergency shutdown scheduled for Sunday', 'Part of the planned maintenance window');
     System.assertEquals(ServiceTriageAction.OUTCOME_REVIEW, res.outcome);

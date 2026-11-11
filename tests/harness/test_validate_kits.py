@@ -179,6 +179,43 @@ class ValidatorNegativeTest(unittest.TestCase):
       self.assertFalse(out["ok"])
       self.assertTrue(any("escalate" in e for e in out["errors"]))
 
+  def test_agent_without_deterministic_scoring_fails(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      root = write_fixture(tmp, "tests/testing-center/service-triage.json",
+                           json.dumps(good_catalog()))
+      body = ("apex://ServiceTriageAction triage_service_case default_agent_user "
+              "back_to_triage go_to_escalation go_to_off_topic "
+              "@utils.transition to @subagent.triage_case "
+              "@utils.transition to @subagent.escalation "
+              "@utils.transition to @subagent.off_topic "
+              "{!@actions.back_to_triage} {!@actions.go_to_escalation} {!@actions.go_to_off_topic}")
+      write_fixture(tmp, "force-app/main/default/aiAuthoringBundles/Service_Triage_Agent/Service_Triage_Agent.agent", body)
+      write_fixture(tmp, "force-app/main/default/aiAuthoringBundles/Service_Triage_Agent/Service_Triage_Agent.bundle-meta.xml",
+                    "<AiAuthoringBundle>AGENT</AiAuthoringBundle>")
+      out = v.run(root)
+      self.assertFalse(out["ok"])
+      self.assertTrue(any("deterministic scoring" in e for e in out["errors"]))
+
+  def test_agent_with_gated_scoring_fails(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      root = write_fixture(tmp, "tests/testing-center/service-triage.json",
+                           json.dumps(good_catalog()))
+      body = ("apex://ServiceTriageAction triage_service_case default_agent_user "
+              "back_to_triage go_to_escalation go_to_off_topic "
+              "@utils.transition to @subagent.triage_case "
+              "@utils.transition to @subagent.escalation "
+              "@utils.transition to @subagent.off_topic "
+              "{!@actions.back_to_triage} {!@actions.go_to_escalation} {!@actions.go_to_off_topic} "
+              "run @actions.triage_service_case triage_outcome triage_scored "
+              'set @variables.case_subject = "" '
+              "available when @variables.case_subject")
+      write_fixture(tmp, "force-app/main/default/aiAuthoringBundles/Service_Triage_Agent/Service_Triage_Agent.agent", body)
+      write_fixture(tmp, "force-app/main/default/aiAuthoringBundles/Service_Triage_Agent/Service_Triage_Agent.bundle-meta.xml",
+                    "<AiAuthoringBundle>AGENT</AiAuthoringBundle>")
+      out = v.run(root)
+      self.assertFalse(out["ok"])
+      self.assertTrue(any("gates scoring" in e for e in out["errors"]))
+
   def test_sh_shebang_script_fails(self):
     with tempfile.TemporaryDirectory() as tmp:
       root = write_fixture(tmp, "scripts/setup-service-triage.sh",

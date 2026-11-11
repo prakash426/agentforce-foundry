@@ -169,9 +169,16 @@ def check_agent_bundle(root):
   for ref in ("{!@actions.back_to_triage}", "{!@actions.go_to_escalation}", "{!@actions.go_to_off_topic}"):
     if ref not in text:
       return ("agent-bundle", False, "agent script never references transition " + ref)
+  for marker in ("run @actions.triage_service_case", "triage_outcome", "triage_scored",
+                 "set @variables.case_subject = \"\""):
+    if marker not in text:
+      return ("agent-bundle", False, "agent script lacks deterministic scoring marker " + marker)
+  if "available when @variables.case_subject" in text:
+    return ("agent-bundle", False, "agent script still gates scoring on unpopulated variables")
   if "AGENT" not in meta.read_text():
     return ("agent-bundle", False, "bundle meta does not declare AGENT type")
-  return ("agent-bundle", True, "agent script and bundle meta present with action binding and transitions")
+  return ("agent-bundle", True, "agent script and bundle meta present with action binding, transitions, "
+                                "and deterministic scoring (structural only; live execution needs an org run)")
 
 
 SHELL_SCRIPTS = [
