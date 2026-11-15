@@ -178,6 +178,47 @@ testing. Fixes are offline verified only; live retest is pending.
 - Offline result: pass.
 - Live retest status: pending.
 
+## Bug 8: authoring bundle fails server compilation on nested if
+
+- Exact input: run setup on the bug fix branch at 745b377, reusing
+  the existing runtime user, reaching authoring bundle validation.
+- Observed output: CompileAgentScriptError, description AgentScript
+  does not support nested 'if' statements, with guidance to combine
+  conditions with 'and'/'or' or restructure. Location line 65,
+  column 16, reported range lines 65-73. Exit status 1. The script
+  stopped before publishing and restored the local agent file.
+  A CLI update notice printed alongside is unrelated to the cause.
+- Expected: the bundle compiles so validation passes and setup can
+  continue to publish.
+- Evidence source: user setup run report against the reviewed
+  commit, plus the committed file showing the nested structure at
+  the reported lines.
+- Root cause: verified. The triage scoring block nested one `if`
+  inside another. Prior offline checks only matched content markers
+  and never parsed conditional structure, so the shape passed every
+  suite. No candidate was published by this attempt, the Apex step
+  was never reached, and existing activated versions were unchanged.
+- Fix: single compound condition combining both guards with `and`,
+  keeping the run block plus all input and output bindings with one
+  less indent level. Behavior preserved: score only after a subject
+  exists and only when the current request has not been scored. The
+  committed tree holds one Agent Script file and this was its only
+  nested conditional; no other occurrences found.
+- Regression test: validator scan for indentation nested `if`
+  blocks, wired into the agent bundle check that the required
+  offline CI job runs. Rejects the exact nested structure (flags
+  lines 65 plus 66 on the pre-fix file), accepts the compound
+  condition, accepts sibling conditionals, flags `if` under `else`,
+  and ignores `|` prose lines, `#` comments, and quoted strings.
+  Narrow scope by design: it is not a compiler and server side
+  validation stays authoritative. Verified clean against the
+  official Local Info Agent sample.
+- Offline result: pass (validator plus 8 new harness tests green;
+  full offline suite green).
+- Live retest status: pending. Server side validation of the
+  corrected bundle has not run yet; the user reruns the
+  validation only checkpoint after independent review.
+
 ## Preserved regressions
 
 - svc-oos-01 poem redirect, svc-amb-01 Help clarification, and

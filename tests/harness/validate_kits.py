@@ -3,9 +3,11 @@
 What this proves: required files exist, the Service catalog parses
 against its schema, permission sets reference real classes, and key
 source markers are present. It never reimplements Apex logic, so a
-pass here is not proof that Apex or any agent behaves correctly.
-Apex behavior is covered by Apex tests. Agent behavior needs a
-live org run. Exits nonzero when any check fails.
+pass here is not proof that Apex or any agent behaves correctly,
+and its structural agent script checks are not proof that the
+bundle compiles. Apex behavior is covered by Apex tests. Agent
+bundle compilation plus agent behavior need a live org run. Exits
+nonzero when any check fails.
 """
 import json
 import os
@@ -153,6 +155,64 @@ def check_permset_refs(root):
   return ("permset-refs", True, "permission set references resolve: " + ", ".join(names))
 
 
+def strip_agent_comment(line):
+  """Remove a # comment starting outside single or double quotes."""
+  quote = None
+  for idx, ch in enumerate(line):
+    if quote is None and ch in ("'", '"'):
+      quote = ch
+    elif quote is not None and ch == quote:
+      quote = None
+    elif quote is None and ch == "#":
+      return line[:idx]
+  return line
+
+
+def find_nested_conditionals(text):
+  """Find indentation nested `if` blocks in Agent Script text.
+
+  Narrow structural check only, not a compiler. The server rejects
+  nested `if` statements and its guidance says to combine conditions
+  with `and`/`or`, while sequential sibling `if` blocks are valid.
+  This scan tracks open `if` indents: an `if` line deeper than an
+  enclosing open `if`/`else` branch is reported as an (outer, inner)
+  line pair. Lines starting with `|` are instruction prose, `#`
+  starts a comment outside quotes, quoted strings are honored, and
+  blank lines never open or close a block. `else`/`elif` lines keep
+  their branch open so an `if` beneath them still counts as nested.
+  An empty result means no nesting was found, never that the bundle
+  compiles; server side validation stays authoritative.
+  """
+  import re
+  findings = []
+  stack = []
+  for number, raw in enumerate(text.splitlines(), 1):
+    if not raw.strip():
+      continue
+    indent = len(raw) - len(raw.lstrip(" \t"))
+    stripped = raw.strip()
+    if stripped.startswith("|"):
+      while stack and stack[-1][0] >= indent:
+        stack.pop()
+      continue
+    code = strip_agent_comment(raw).strip()
+    if not code:
+      continue
+    if re.match(r"if\s+.+:\s*$", code):
+      while stack and stack[-1][0] >= indent:
+        stack.pop()
+      if stack:
+        findings.append((stack[-1][1], number))
+      stack.append((indent, number))
+    elif re.match(r"(else|elif)\b.*:\s*$", code):
+      while stack and stack[-1][0] > indent:
+        stack.pop()
+    else:
+      while stack and stack[-1][0] >= indent:
+        stack.pop()
+  return findings
+
+
 def check_agent_bundle(root):
   agent = root / AGENT_DIR / "Service_Triage_Agent.agent"
   meta = root / AGENT_DIR / "Service_Triage_Agent.bundle-meta.xml"
@@ -181,10 +241,17 @@ def check_agent_bundle(root):
       return ("agent-bundle", False, "agent script lacks deterministic scoring marker " + marker)
   if "available when @variables.case_subject" in text:
     return ("agent-bundle", False, "agent script still gates scoring on unpopulated variables")
+  nested = find_nested_conditionals(text)
+  if nested:
+    outer, inner = nested[0]
+    return ("agent-bundle", False, "agent script uses unsupported nested conditionals "
+                                   "(if at line %d inside if at line %d); combine conditions "
+                                   "with and/or" % (inner, outer))
   if "AGENT" not in meta.read_text():
     return ("agent-bundle", False, "bundle meta does not declare AGENT type")
   return ("agent-bundle", True, "agent script and bundle meta present with action binding, transitions, "
-                                "and deterministic scoring (structural only; live execution needs an org run)")
+                                "and deterministic scoring (structural only; server compile "
+                                "plus live execution need an org run)")
 
 
 SHELL_SCRIPTS = [

@@ -1,7 +1,7 @@
 # Testing
 
 ## Layers
-1. Offline static checks. No org needed. Prove the repo is complete and consistent. They never prove Apex or agent behavior.
+1. Offline static checks. No org needed. Prove the repo is complete and consistent. They never prove Apex or agent behavior, and they never prove the bundle compiles. A nested conditional once passed them all and failed server compilation; the added structural check narrows that gap without replacing server validation.
 2. Apex unit tests. Need an org. Prove the classifier contract. Version 1 ran 25 tests green; 2 new uncertainty tests await an org run.
 3. Agent evaluation. Needs an Agentforce enabled org with the agent activated. Proves routing, action invocation, and response behavior. Version 1 conversations failed acceptance; fixed behavior awaits retest.
 

@@ -91,7 +91,7 @@ python3 tests/shell/test_verify_sf_output.py
 python3 tests/shell/test_script_failure_modes.py
 ```
 
-All must exit zero. These prove repo consistency, catalog validity, converter and checker behavior, static reply markers, output verification, and script failure handling. They never prove Apex or agent behavior; that needs an org. Static checks never establish that collection ran before scoring in a live turn.
+All must exit zero. These prove repo consistency, catalog validity, converter and checker behavior, static reply markers, output verification, and script failure handling. They never prove Apex or agent behavior, and they never prove the bundle compiles; that needs an org. A nested conditional once passed every offline check and failed server compilation, so static checks never establish that collection ran before scoring in a live turn either.
 
 ## Existing Developer Edition org path
 
@@ -190,7 +190,7 @@ CI runs every offline layer on each push and pull request, plus honest org gated
 ## Known limitations
 
 - Version 1 reached an org (deploy, user setup, validation, publish, 25 Apex tests, activation) but its conversations failed acceptance testing. The fixes here are offline verified only; no fix is org verified before retesting.
-- The rewritten agent bundle uses deterministic logic plus prompt instructions following documented Agent Script semantics, but the new shape has not compiled server side yet. It still awaits execution in the user org.
+- The rewritten agent bundle uses deterministic logic plus prompt instructions following documented Agent Script semantics. One server compile failure (unsupported nested `if`, fixed with a compound condition) was already observed during setup validation; the corrected bundle still awaits server side re-validation plus execution in the user org.
 - Twenty seven Apex tests are committed; the two new uncertainty tests still await execution in the user org.
 - Queue labels are suggestions, never validated against any org.
 - Negation and uncertainty word lists are heuristics; measured runs may require tuning.

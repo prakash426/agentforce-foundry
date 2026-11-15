@@ -106,6 +106,32 @@ Files produced (local only, never commit): the per step JSON captures
 plus `.err` sidecars, `agent-user-<alias>.json`, the candidate version
 file, and `ci-results`.
 
+## Validation only checkpoint (run before retrying full setup)
+
+After any agent bundle edit, prove the bundle compiles before running
+the full setup again. This checkpoint validates only; it publishes
+nothing, activates nothing, and runs no tests.
+
+```sh
+ORG_ALIAS=my-dev-org
+RUNTIME_USER=<existing-runtime-username>
+AGENT_FILE=force-app/main/default/aiAuthoringBundles/Service_Triage_Agent/Service_Triage_Agent.agent
+cp "$AGENT_FILE" /tmp/agent-validate-backup.agent
+sed "s/UPDATE_WITH_DEFAULT_AGENT_USER/$RUNTIME_USER/" /tmp/agent-validate-backup.agent > "$AGENT_FILE"
+sf agent validate authoring-bundle -n Service_Triage_Agent -o "$ORG_ALIAS" --json | tee validate-check.json
+python3 scripts/verify_sf_output.py agent-validate validate-check.json
+cp /tmp/agent-validate-backup.agent "$AGENT_FILE"
+grep -n UPDATE_WITH_DEFAULT_AGENT_USER "$AGENT_FILE"
+```
+
+Checkpoints: the validate command exits zero, the verifier prints
+`agent-validate success`, and the final grep matches the placeholder
+again, proving restoration. If validation fails, read the compiler
+error location in `validate-check.json`, fix the bundle, rerun the
+offline suite, and repeat this checkpoint. Only then retry full
+setup. Never commit a real username; `git status` must show no
+modification to the agent file afterward.
+
 ## Rerun and resume notes
 
 1. Deploy, permission sets, validation, publish, and Apex tests are safe

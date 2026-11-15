@@ -62,16 +62,15 @@ subagent triage_case:
 
     reasoning:
         instructions: ->
-            if @variables.case_subject != "":
-                if @variables.triage_scored != "yes":
-                    run @actions.triage_service_case
-                        with subject = @variables.case_subject
-                        with details = @variables.case_details
-                        set @variables.triage_outcome = @outputs.outcome
-                        set @variables.triage_priority = @outputs.priority
-                        set @variables.triage_queue = @outputs.queue
-                        set @variables.triage_reason = @outputs.reason
-                        set @variables.triage_scored = "yes"
+            if @variables.case_subject != "" and @variables.triage_scored != "yes":
+                run @actions.triage_service_case
+                    with subject = @variables.case_subject
+                    with details = @variables.case_details
+                    set @variables.triage_outcome = @outputs.outcome
+                    set @variables.triage_priority = @outputs.priority
+                    set @variables.triage_queue = @outputs.queue
+                    set @variables.triage_reason = @outputs.reason
+                    set @variables.triage_scored = "yes"
             | Your job is to triage one support request at a time. Scoring runs automatically once details are collected.
               You MUST call {!@actions.collect_details} before any reply that classifies, prioritizes, or queues. Put the short summary in case_subject and the rest in case_details, mapped from the current conversation. State was cleared at turn start, so always rebuild from history. Never reuse subject or details from a prior distinct request. When the user answers a clarifying question, combine only that answer with the same request.
               When mapping messages into subject and details, preserve negation words (not, no, never, none, is not, is not down, cannot) and uncertainty (maybe, might be, may be, possible, not sure, do not know, unknown) exactly as stated. Never drop, invert, or soften them.
