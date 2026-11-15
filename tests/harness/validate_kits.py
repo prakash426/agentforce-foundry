@@ -16,7 +16,7 @@ from pathlib import Path
 DEFAULT_ROOT = Path(__file__).resolve().parents[2]
 KITS = ["service-triage", "sales-qualification", "internal-help"]
 SERVICE_SUITE_KEYS = {"catalog", "version", "scenarios", "static_thresholds"}
-SCENARIO_KEYS = {"id", "category", "input", "apex_outcome", "agent_expect"}
+SCENARIO_KEYS = {"id", "category", "input", "apex_outcome", "agent_expect", "requires_action"}
 CATEGORIES = {"normal", "ambiguous", "adversarial", "out_of_scope", "escalation"}
 OUTCOMES = {"SUGGESTED", "NEEDS_CLARIFICATION", "NEEDS_REVIEW"}
 AGENT_EXPECTS = {"run_triage", "clarify", "redirect", "escalate"}
@@ -75,6 +75,12 @@ def check_service_catalog(root):
         problems.append("scenario %s %s must not set priority or queue" % (case["id"], case["apex_outcome"]))
     if case.get("agent_expect") not in AGENT_EXPECTS:
       problems.append("scenario %s has unknown agent_expect" % case["id"])
+    if type(case.get("requires_action")) is not bool:
+      problems.append("scenario %s requires_action must be true or false" % case["id"])
+    if case.get("agent_expect") == "run_triage" and case.get("requires_action") is not True:
+      problems.append("scenario %s run_triage without required action is contradictory" % case["id"])
+    if case.get("apex_outcome") == "NEEDS_REVIEW" and case.get("requires_action") is not True:
+      problems.append("scenario %s NEEDS_REVIEW without required action is contradictory" % case["id"])
     turns = case.get("turns")
     if turns is not None:
       problems.extend(check_turns(case["id"], turns, case.get("input")))

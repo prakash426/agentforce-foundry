@@ -20,6 +20,8 @@ jobs:
         run: python3 tests/eval/test_agent_eval_tools.py
       - name: run metadata resolver checks
         run: python3 tests/eval/test_resolve_eval_metadata.py
+      - name: run response contract checks
+        run: python3 tests/eval/test_response_contract.py
       - name: run output verifier checks
         run: python3 tests/shell/test_verify_sf_output.py
       - name: run mocked script failure checks

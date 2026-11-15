@@ -65,9 +65,9 @@ def good_catalog():
     "scenarios": [
       {"id": "n1", "category": "normal", "input": "Checkout is down",
        "apex_outcome": "SUGGESTED", "apex_priority": "High",
-       "apex_queue": "Critical_Response", "agent_expect": "run_triage", "notes": "n"},
+       "apex_queue": "Critical_Response", "agent_expect": "run_triage", "requires_action": True, "notes": "n"},
       {"id": "a1", "category": "ambiguous", "input": "Help",
-       "apex_outcome": "NEEDS_CLARIFICATION", "agent_expect": "clarify", "notes": "n"},
+       "apex_outcome": "NEEDS_CLARIFICATION", "agent_expect": "clarify", "requires_action": False, "notes": "n"},
     ],
   }
 
@@ -261,7 +261,7 @@ class CandidateScopeTest(unittest.TestCase):
     catalog = {"catalog": "c", "version": 1, "scenarios": [
       {"id": "f1", "category": "ambiguous", "input": "Checkout is down now",
        "apex_outcome": "SUGGESTED", "apex_priority": "High",
-       "apex_queue": "Critical_Response", "agent_expect": "run_triage", "notes": "n",
+       "apex_queue": "Critical_Response", "agent_expect": "run_triage", "requires_action": True, "notes": "n",
        "turns": [
          {"role": "user", "message": "Help"},
          {"role": "agent", "message": "What is affected?", "agent_expect": "clarify"},
@@ -326,6 +326,58 @@ class DefinitionVersionLayoutTest(unittest.TestCase):
       for path in vdir.glob("*.xml"):
         path.write_text("<AiAgentDefinitionVersion><oops")
       spec_path, map_path = convert_to(tmp, good_catalog())
+      self.assertEqual(1, run_resolve(tmp, root, spec_path, map_path))
+
+
+class RequiredActionResolutionTest(unittest.TestCase):
+  def review_catalog(self):
+    return {
+      "catalog": "service-triage",
+      "version": 2,
+      "static_thresholds": {"min_scenarios_per_category": 1},
+      "live_targets": {"normal_outcome_match": 1.0},
+      "scenarios": [
+        {"id": "r1", "category": "escalation", "input": "Outage but may be false alarm",
+         "apex_outcome": "NEEDS_REVIEW", "agent_expect": "escalate",
+         "requires_action": True, "notes": "uncertain review"},
+        {"id": "b1", "category": "escalation", "input": "Please transfer me to a human.",
+         "apex_outcome": "SUGGESTED", "apex_priority": "Low",
+         "apex_queue": "General_Support", "agent_expect": "escalate",
+         "requires_action": False, "notes": "bare transfer"},
+      ],
+    }
+
+  def review_layout(self):
+    layout = standard_layout()
+    layout["bundles"]["PlannerA2"] = (
+      ["triage_case", "ambiguous_request", "escalation"], ["triage_service_case"])
+    layout["plugins"]["escalation"] = "triage_service_case"
+    return layout
+
+  def test_review_action_resolves_to_candidate(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      root = write_project(tmp, self.review_layout())
+      spec_path, map_path = convert_to(tmp, self.review_catalog())
+      self.assertEqual(0, run_resolve(tmp, root, spec_path, map_path))
+      report = json.loads((Path(tmp) / "report.json").read_text())
+      self.assertEqual("v2", report["version"])
+      self.assertIn("triage_service_case", report["reachable_actions"])
+      self.assertEqual(["triage_service_case"], report["decisions"][0]["expectedActions"])
+      self.assertEqual([], report["decisions"][1]["expectedActions"])
+
+  def test_review_action_outside_candidate_rejected(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      root = write_project(tmp, self.review_layout())
+      spec_path, map_path = convert_to(tmp, self.review_catalog())
+      self.assertEqual(1, run_resolve(tmp, root, spec_path, map_path, version="1"))
+
+  def test_mapping_action_mismatch_rejected(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      root = write_project(tmp, self.review_layout())
+      spec_path, map_path = convert_to(tmp, self.review_catalog())
+      manifest = json.loads(Path(map_path).read_text())
+      manifest["cases"][0]["required_actions"] = []
+      Path(map_path).write_text(json.dumps(manifest))
       self.assertEqual(1, run_resolve(tmp, root, spec_path, map_path))
 
 

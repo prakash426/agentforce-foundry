@@ -148,7 +148,8 @@ USE_EXISTING_ORG=1 ORG_ALIAS=my-dev-org AGENT_USER=<earlier-username> bash scrip
 Checkpoints: Step 3 reports already assigned for the admin set instead
 of failing; Step 4 verifies the existing user without creating a
 duplicate; validation completes; publish prints a new candidate
-version found from the actual retrieval layout; Apex runs 27 tests.
+version found for the exact agent from the actual retrieval layout;
+Apex runs 27 tests including the 2 new uncertainty tests.
 
 Stage 2, activate and preview. Activate the new candidate, then run
 the scripted preview and keep every transcript:
@@ -159,11 +160,14 @@ ORG_ALIAS=my-dev-org bash scripts/preview-service-triage-turns.sh
 ```
 
 Checkpoints per turn: the trace shows triage_service_case invoked with
-current inputs before any classification reply; replies carry exact
-values (High with Critical_Response, Medium with Billing, Low with
-General_Support) or omit fields on NEEDS codes; transfer requests
-state limits with no promises; uncertain turns preserve unknown
-impact; override turns score the valid issue.
+current inputs before every reply whose outcome depends on
+classification (normal plus uncertainty plus override cases); bare
+transfer requests route directly with no action and state limits with
+no promises; replies carry exact values (High with Critical_Response,
+Medium with Billing, Low with General_Support) or omit fields on
+NEEDS codes; uncertain turns preserve unknown impact; override turns
+score the valid issue. Keep session ids and use trace list plus trace
+read actions detail for action proof.
 
 Stage 3, evaluate. Convert, resolve against the new candidate,
 create, run, and score:
@@ -172,9 +176,11 @@ create, run, and score:
 ORG_ALIAS=my-dev-org AGENT_VERSION=N RUN_TEST=1 bash scripts/create-service-triage-test.sh
 ```
 
-Checkpoints: resolver reports the new layout and candidate; the
-checker passes with commit, version, and run id recorded; transcripts
-and structured trace evidence are preserved with the record.
+Checkpoints: resolver reports the new layout and candidate with
+required actions resolved; the checker passes with commit, version,
+and run id recorded, showing execution plus assertion results
+separately; transcripts and structured trace evidence are preserved
+with the record.
 
 ## Activate one version
 

@@ -184,3 +184,95 @@ testing. Fixes are offline verified only; live retest is pending.
   billing Medium coverage remain in the catalog.
 - The duplicate-invoice Medium/Billing observation stays response-level
   only until live action execution is demonstrated.
+
+## PR 7 review findings on the fixes (separate from Version 1 acceptance)
+
+The three items below are review findings on the bug fix branch
+itself, not new live org observations. Version 1 failures above stay
+labeled as failed acceptance testing. Fixes below are offline
+verified only; live retest is pending.
+
+### Finding 1: candidate version detection mixes agents
+
+- Exact defect: publish diff combined version numbers from all agents
+  in the shared versions listing before comparing before and after.
+  With OtherAgent#2 plus Service Triage#1 before, and Service Triage#2
+  added after, the helper reported no new version because 2 already
+  existed elsewhere.
+- Expected: pass the expected agent identity explicitly, filter by
+  exact identity before diffing, support legacy vN plus current
+  Agent#N layouts, fail on missing, malformed, conflicting, or
+  ambiguous evidence, never choose the highest version without a diff.
+- Fix: publish diff now requires the expected agent, matches current
+  layout tokens on exact identity (similar names never match), treats
+  scoped legacy tokens as the expected agent, rejects removed
+  versions as conflicting, and reports exactly one new version.
+  Setup script plus scratch CI pass the identity. Provenance from
+  source commit through published candidate, activation, resolver
+  report, and evaluation is preserved.
+- Regression test: exact two agent collision, other agent publishing
+  alone, two agents adding the same number, multiple new versions,
+  missing selected agent, legacy plus current plus mixed layouts,
+  similar names, conflicting removed versions, malformed tokens, no
+  blind highest version, missing flag, invalid identity.
+- Offline result: pass (verifier suite green with the new cases).
+- Live retest status: pending. Publish in the existing org and confirm
+  the candidate is found for the exact agent from the actual layout.
+
+### Finding 2: response contract suite absent from CI
+
+- Exact defect: four locally passing contract tests existed, but the
+  offline workflow never executed them, while the README said every
+  offline layer runs in CI.
+- Expected: run the suite in the offline workflow, fail the required
+  job on failure, verify execution in CI logs, reconcile docs, keep
+  the suite described as static checks, never weaken assertions.
+- Fix: added the response contract step to foundry-ci after the
+  resolver checks. Updated README quickstart plus layers table plus
+  testing guide commands plus CI description. No assertions changed.
+- Regression test: the four existing contract tests now run as a
+  required CI step; CI logs must show the step executing.
+- Offline result: pass (4 contract tests green locally; CI execution
+  verified in the revised PR run logs, not by badge alone).
+- Live retest status: not applicable (static checks only). Live
+  response behavior still needs preview transcripts plus evaluation.
+
+### Finding 3: required action tied to final behavior
+
+- Exact defect: the converter emitted the triage action only for
+  run_triage final behavior. Uncertainty plus override cases ending
+  in review or human follow up therefore received an empty action
+  list, despite needing Apex classification.
+- Expected: represent mandatory execution independently of final
+  response behavior, require the action for classification dependent
+  outcomes including uncertainty plus override regressions, keep bare
+  human transfer action free when it routes directly, update schema,
+  converter, mapping, resolver, checker, plus tooling, preserve
+  candidate scoped resolution, separate execution success from
+  assertion success, keep exact priority and queue rules, never claim
+  seeded history proves every earlier turn executed, document any
+  runner observability limit with a supported trace path, invent no
+  test fields.
+- Fix: catalog adds an independent requires_action flag for every
+  scenario. Normal triage plus REVIEW outcomes require true; bare
+  transfer plus clarify plus redirect cases that route directly stay
+  false. Converter emits expected actions from the flag and records
+  the requirement in the mapping. Resolver checks mapping against
+  spec and resolves required actions against the selected candidate
+  only. Checker verifies required actions in generated actions data
+  and records execution plus assertion results separately; missing
+  evidence cannot pass. Priority and queue rules unchanged. Docs
+  state that seeded history never proves earlier execution and give
+  the trace list plus trace read actions path for logic run proof.
+- Regression test: normal classification requires the action,
+  uncertainty review requires the action, override plus valid outage
+  requires the action, bare transfer stays action free, missing
+  evidence cannot pass with passing assertions, invalid plus
+  contradictory requirements fail validation, required actions
+  resolve to the selected candidate and fail outside it.
+- Offline result: pass (converter plus checker plus resolver plus
+  harness suites green with the new cases; real catalog converts to
+  20 cases with 10 requiring the action).
+- Live retest status: pending. Preview plus evaluation must show the
+  action invoked with current inputs before every dependent reply,
+  with trace evidence preserved.

@@ -24,12 +24,12 @@ def good_catalog():
     "scenarios": [
       {"id": "n1", "category": "normal", "input": "Checkout is down",
        "apex_outcome": "SUGGESTED", "apex_priority": "High",
-       "apex_queue": "Critical_Response", "agent_expect": "run_triage", "notes": "n"},
+       "apex_queue": "Critical_Response", "agent_expect": "run_triage", "requires_action": True, "notes": "n"},
       {"id": "a1", "category": "ambiguous", "input": "Help",
-       "apex_outcome": "NEEDS_CLARIFICATION", "agent_expect": "clarify", "notes": "n"},
+       "apex_outcome": "NEEDS_CLARIFICATION", "agent_expect": "clarify", "requires_action": False, "notes": "n"},
       {"id": "f1", "category": "ambiguous", "input": "Checkout is down now",
        "apex_outcome": "SUGGESTED", "apex_priority": "High",
-       "apex_queue": "Critical_Response", "agent_expect": "run_triage", "notes": "flow",
+       "apex_queue": "Critical_Response", "agent_expect": "run_triage", "requires_action": True, "notes": "flow",
        "turns": [
          {"role": "user", "message": "Help"},
          {"role": "agent", "message": "What is affected?", "agent_expect": "clarify"},
@@ -74,10 +74,14 @@ class ConverterPositiveTest(unittest.TestCase):
     self.assertEqual("agent", flow["conversationHistory"][1]["role"])
     self.assertEqual("ambiguous_request", flow["conversationHistory"][1]["topic"])
 
-  def test_expected_actions_only_for_triage(self):
-    spec, _ = conv.convert(good_catalog(), "Service_Triage_Agent")
+  def test_expected_actions_follow_requires_flag(self):
+    spec, manifest = conv.convert(good_catalog(), "Service_Triage_Agent")
     self.assertEqual(["triage_service_case"], spec["testCases"][0]["expectedActions"])
     self.assertEqual([], spec["testCases"][1]["expectedActions"])
+    self.assertTrue(manifest["cases"][0]["requires_action"])
+    self.assertEqual(["triage_service_case"], manifest["cases"][0]["required_actions"])
+    self.assertFalse(manifest["cases"][1]["requires_action"])
+    self.assertEqual([], manifest["cases"][1]["required_actions"])
 
   def test_real_catalog_converts(self):
     catalog = json.loads((ROOT / "tests" / "testing-center" / "service-triage.json").read_text())
@@ -375,7 +379,7 @@ class MappingConsistencyTest(unittest.TestCase):
     catalog["scenarios"].append(
       {"id": "e1", "category": "escalation", "input": "Talk to a human",
        "apex_outcome": "SUGGESTED", "apex_priority": "High",
-       "apex_queue": "Critical_Response", "agent_expect": "escalate", "notes": "n"})
+       "apex_queue": "Critical_Response", "agent_expect": "escalate", "requires_action": False, "notes": "n"})
     _, manifest = conv.convert(good_catalog(), "Service_Triage_Agent")
     self.assertIsNone(self.check_with(manifest, catalog))
 
@@ -401,6 +405,145 @@ class MappingConsistencyTest(unittest.TestCase):
 
   def test_empty_mapping_rejected(self):
     self.assertIsNone(self.check_with({"cases": []}, good_catalog()))
+
+  def test_requires_action_mismatch_rejected(self):
+    _, manifest = conv.convert(good_catalog(), "Service_Triage_Agent")
+    manifest["cases"][0]["requires_action"] = False
+    self.assertIsNone(self.check_with(manifest, good_catalog()))
+
+  def test_required_actions_mismatch_rejected(self):
+    _, manifest = conv.convert(good_catalog(), "Service_Triage_Agent")
+    manifest["cases"][0]["required_actions"] = []
+    self.assertIsNone(self.check_with(manifest, good_catalog()))
+
+
+class ActionRequirementTest(unittest.TestCase):
+  def convert_real(self):
+    catalog = json.loads((ROOT / "tests" / "testing-center" / "service-triage.json").read_text())
+    result = conv.convert(catalog, "Service_Triage_Agent")
+    self.assertIsNotNone(result)
+    spec, manifest = result
+    by_id = {m["scenario_id"]: (m, c) for m, c in zip(manifest["cases"], spec["testCases"])}
+    return by_id
+
+  def test_normal_classification_requires_action(self):
+    by_id = self.convert_real()
+    for sid in ("svc-high-01", "svc-bill-01", "svc-low-01", "svc-flow-01", "svc-flow-04", "svc-flow-06"):
+      mapping, case = by_id[sid]
+      self.assertTrue(mapping["requires_action"], msg=sid)
+      self.assertEqual(["triage_service_case"], case["expectedActions"], msg=sid)
+      self.assertEqual(["triage_service_case"], mapping["required_actions"], msg=sid)
+
+  def test_uncertainty_review_requires_action(self):
+    by_id = self.convert_real()
+    for sid in ("svc-esc-02", "svc-flow-05", "svc-flow-07"):
+      mapping, case = by_id[sid]
+      self.assertTrue(mapping["requires_action"], msg=sid)
+      self.assertEqual(["triage_service_case"], case["expectedActions"], msg=sid)
+      self.assertEqual("escalation", case["expectedTopic"], msg=sid)
+
+  def test_override_requires_action(self):
+    by_id = self.convert_real()
+    mapping, case = by_id["svc-adv-01"]
+    self.assertTrue(mapping["requires_action"])
+    self.assertEqual(["triage_service_case"], case["expectedActions"])
+    self.assertEqual("escalation", case["expectedTopic"])
+
+  def test_bare_transfer_action_free(self):
+    by_id = self.convert_real()
+    mapping, case = by_id["svc-esc-03"]
+    self.assertFalse(mapping["requires_action"])
+    self.assertEqual([], case["expectedActions"])
+    self.assertEqual([], mapping["required_actions"])
+    self.assertEqual("escalation", case["expectedTopic"])
+
+  def test_review_fields_absent_preserved(self):
+    catalog = json.loads((ROOT / "tests" / "testing-center" / "service-triage.json").read_text())
+    for case in catalog["scenarios"]:
+      if case["apex_outcome"] == "NEEDS_REVIEW":
+        self.assertFalse(case.get("apex_priority"), msg=case["id"])
+        self.assertFalse(case.get("apex_queue"), msg=case["id"])
+        self.assertTrue(case.get("requires_action"), msg=case["id"])
+
+  def test_missing_requires_action_fails(self):
+    data = good_catalog()
+    del data["scenarios"][0]["requires_action"]
+    self.assertIsNone(conv.convert(data, "S"))
+
+  def test_nonboolean_requires_action_fails(self):
+    for bad in ("yes", 1, 0, None, [], {}):
+      data = good_catalog()
+      data["scenarios"][0]["requires_action"] = bad
+      self.assertIsNone(conv.convert(data, "S"), msg="bad=%r" % (bad,))
+
+  def test_run_triage_without_action_fails(self):
+    data = good_catalog()
+    data["scenarios"][0]["requires_action"] = False
+    self.assertIsNone(conv.convert(data, "S"))
+
+  def test_review_without_action_fails(self):
+    data = good_catalog()
+    data["scenarios"][1]["apex_outcome"] = "NEEDS_REVIEW"
+    data["scenarios"][1]["requires_action"] = False
+    self.assertIsNone(conv.convert(data, "S"))
+
+
+class ExecutionEvidenceTest(unittest.TestCase):
+  def run_checker(self, results, catalog=None, file_name="test-result-run-1.json"):
+    with tempfile.TemporaryDirectory() as tmp:
+      tmp = Path(tmp)
+      catalog = catalog if catalog is not None else good_catalog()
+      res_path = write_json(tmp / file_name, results)
+      converted = conv.convert(catalog, "Service_Triage_Agent")
+      self.assertIsNotNone(converted)
+      _, manifest = converted
+      map_path = write_json(tmp / "map.json", manifest)
+      cat_path = write_json(tmp / "catalog.json", catalog)
+      return checker.check(res_path, map_path, cat_path, "c", "v2", "run-1")
+
+  def test_missing_required_action_evidence_fails(self):
+    first = legacy_case(1)
+    first["generatedData"]["actionsSequence"] = []
+    first["generatedData"]["invokedActions"] = "{}"
+    results = legacy_response([first, legacy_case(2), legacy_case(3)])
+    record = self.run_checker(results)
+    self.assertIsNotNone(record)
+    self.assertFalse(record["ok"])
+    self.assertEqual("FAIL", record["cases"][0]["status"])
+    self.assertTrue(record["cases"][0]["assertion_ok"])
+    self.assertFalse(record["cases"][0]["execution_ok"])
+    self.assertTrue(any("missing required action evidence" in n for n in record["cases"][0]["notes"]))
+
+  def test_action_free_case_passes_without_evidence(self):
+    second = legacy_case(2)
+    second["generatedData"]["actionsSequence"] = []
+    second["generatedData"]["invokedActions"] = "{}"
+    results = legacy_response([legacy_case(1), second, legacy_case(3)])
+    record = self.run_checker(results)
+    self.assertIsNotNone(record)
+    self.assertTrue(record["ok"])
+    self.assertEqual("PASS", record["cases"][1]["status"])
+    self.assertTrue(record["cases"][1]["execution_ok"])
+
+  def test_invoked_json_counts_as_evidence(self):
+    first = legacy_case(1)
+    first["generatedData"]["actionsSequence"] = []
+    first["generatedData"]["invokedActions"] = '["triage_service_case"]'
+    results = legacy_response([first, legacy_case(2), legacy_case(3)])
+    record = self.run_checker(results)
+    self.assertIsNotNone(record)
+    self.assertTrue(record["ok"])
+    self.assertTrue(record["cases"][0]["execution_ok"])
+
+  def test_similar_action_name_does_not_count(self):
+    first = legacy_case(1)
+    first["generatedData"]["actionsSequence"] = ["triage_service_case_extra"]
+    first["generatedData"]["invokedActions"] = "triage_service_case_extra ran"
+    results = legacy_response([first, legacy_case(2), legacy_case(3)])
+    record = self.run_checker(results)
+    self.assertIsNotNone(record)
+    self.assertFalse(record["ok"])
+    self.assertFalse(record["cases"][0]["execution_ok"])
 
 
 if __name__ == "__main__":

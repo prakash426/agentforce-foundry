@@ -86,11 +86,12 @@ python3 tests/harness/test_validate_kits.py
 python3 tests/eval/audit_service_scenarios.py
 python3 tests/eval/test_agent_eval_tools.py
 python3 tests/eval/test_resolve_eval_metadata.py
+python3 tests/eval/test_response_contract.py
 python3 tests/shell/test_verify_sf_output.py
 python3 tests/shell/test_script_failure_modes.py
 ```
 
-All must exit zero. These prove repo consistency, catalog validity, converter and checker behavior, output verification, and script failure handling. They never prove Apex or agent behavior; that needs an org.
+All must exit zero. These prove repo consistency, catalog validity, converter and checker behavior, static reply markers, output verification, and script failure handling. They never prove Apex or agent behavior; that needs an org. Static checks never establish that collection ran before scoring in a live turn.
 
 ## Existing Developer Edition org path
 
@@ -128,11 +129,11 @@ Each stage is distinct. The scripts and CI enforce the order and verify every st
 2. Validation only deploy (CI): a dry run of the Service manifest with its own test and coverage results. Validation saves nothing and proves nothing about installed code.
 3. Runtime user: create an agent user with the supported CLI command, or verify a supplied existing user, then assign the custom Service permission set to that user. Validation and publishing never run without a valid user.
 4. Authoring bundle validation: `sf agent validate` compiles the Agent Script. A pass means it compiles, not that it is published.
-5. Publish: `sf agent publish` creates an inactive candidate version plus its agent metadata, retrieved back to the project in either the legacy bots layout or the current aiAgentDefinitionVersions layout. Deployment alone never creates a version. Publish JSON carries no version number; the candidate is identified from the retrieval diff.
+5. Publish: `sf agent publish` creates an inactive candidate version plus its agent metadata, retrieved back to the project in either the legacy bots layout or the current aiAgentDefinitionVersions layout. Deployment alone never creates a version. Publish JSON carries no version number; the candidate is identified from the retrieval diff for the exact agent identity, filtered before comparing versions. Similar agent names never match.
 6. Activate: `sf agent activate` makes one version live. Publishing leaves versions inactive by design. Activation in your own org stays an explicit manual choice; CI activates only inside its disposable scratch org.
-7. Apex tests: run against installed candidate code with coverage kept.
-8. Agent evaluation: convert committed scenarios to a test spec, resolve names against the selected candidate version only, create the test, run it, and score results against catalog thresholds with commit, version, and run id recorded.
-9. Sequential preview (optional): send scripted multi-turn conversations through preview sessions and keep transcripts.
+7. Apex tests: run against installed candidate code with coverage kept. Twenty seven tests are committed; the two new uncertainty tests await org execution.
+8. Agent evaluation: convert committed scenarios to a test spec with required actions from the independent catalog flag (not from final response behavior alone), resolve names against the selected candidate version only, create the test, run it, and score results against catalog thresholds with commit, version, and run id recorded. Scoring separates required action execution evidence from assertion verdicts. Seeded history never proves earlier turns executed.
+9. Sequential preview (optional): send scripted multi-turn conversations through preview sessions and keep transcripts. Use trace reads for action execution proof when needed.
 
 ## Agent user and permissions
 
@@ -167,6 +168,7 @@ Agent: I can triage this once I know more. What is the issue, and who or what is
 | Scenario audit | `python3 tests/eval/audit_service_scenarios.py` | Catalog completeness, always pending live |
 | Converter plus checker | `python3 tests/eval/test_agent_eval_tools.py` | Spec conversion, scoring, thresholds |
 | Metadata resolver | `python3 tests/eval/test_resolve_eval_metadata.py` | Topic and action name resolution |
+| Response contract | `python3 tests/eval/test_response_contract.py` | Static reply markers, never live proof |
 | Output verifier | `python3 tests/shell/test_verify_sf_output.py` | CLI payload success markers |
 | Script failure modes | `python3 tests/shell/test_script_failure_modes.py` | Fail stop behavior plus file restoration |
 | Apex tests (needs org) | `sf apex run test -n ServiceTriageActionTest` | Classifier contract on installed code |
@@ -188,10 +190,12 @@ CI runs every offline layer on each push and pull request, plus honest org gated
 ## Known limitations
 
 - Version 1 reached an org (deploy, user setup, validation, publish, 25 Apex tests, activation) but its conversations failed acceptance testing. The fixes here are offline verified only; no fix is org verified before retesting.
-- The rewritten agent bundle uses deterministic logic plus prompt instructions following documented Agent Script semantics, but the new shape has not compiled server side yet.
+- The rewritten agent bundle uses deterministic logic plus prompt instructions following documented Agent Script semantics, but the new shape has not compiled server side yet. It still awaits execution in the user org.
+- Twenty seven Apex tests are committed; the two new uncertainty tests still await execution in the user org.
 - Queue labels are suggestions, never validated against any org.
 - Negation and uncertainty word lists are heuristics; measured runs may require tuning.
-- Converter topic and action names resolve against retrieved metadata; custom JSONPath evaluations ship empty until a first verbose run.
+- Converter topic and action names resolve against retrieved metadata; required actions come from the independent catalog flag and are checked separately from response assertions. Custom JSONPath evaluations ship empty until a first verbose run. Logic run observability in the runner is unproven until the first measured run; use trace reads for action proof when needed.
+- Publish JSON carries no version number; candidate identity rests on the exact agent retrieval diff plus resolver report plus recorded activation.
 - English only. No record writes in v1. No human transfer in v1.
 - Legacy evaluation results expose the subject but not the tested version; version binding rests on recorded activation plus disposable org exclusivity.
 

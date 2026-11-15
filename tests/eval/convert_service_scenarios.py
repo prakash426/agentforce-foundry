@@ -14,8 +14,14 @@ Limitations, stated plainly:
 1. expectedTopic uses subagent developer names as initial values. The
    metadata resolver rewrites them against retrieved GenAiPlugin
    developer names before test creation, failing on missing names.
-2. expectedActions uses the triage action name for run_triage and an
-   empty list otherwise. The resolver verifies each action the same way.
+2. expectedActions comes from the independent requires_action flag,
+   not from the final response behavior. True emits the triage
+   action name; False emits an empty list. Review and escalation
+   cases that depend on Apex classification still require the
+   action. Bare transfer requests that route directly stay empty.
+   The resolver verifies each required action against the selected
+   candidate only. An empty list asserts nothing about actions; the
+   platform emits no action check for it.
 3. expectedOutcome is natural language. The platform cannot assert Apex
    outcome codes directly; Apex codes stay covered by Apex unit tests.
 4. customEvaluations ships empty. JSONPath evals need generated data
@@ -23,8 +29,18 @@ Limitations, stated plainly:
 5. Escalate means a written human follow up recommendation. V1 never
    transfers, so no handoff assertion is emitted.
 6. Seeded history tests the next response in context; it does not prove
-   the agent produced earlier turns. Use the sequential preview script
-   for real multi-turn proof with transcripts.
+   the agent produced earlier turns and does not prove every earlier
+   turn executed. The platform sends only user history turns; agent
+   history turns are context, not executed evidence. Use the
+   sequential preview script for real multi-turn proof with
+   transcripts, and use trace reads for action execution proof.
+7. Logic run observability is unproven until the first measured run.
+   expectedActions asserts through the planner actions check against
+   invoked actions. If a required logic run does not appear there
+   despite trace evidence, use the supported trace path: keep the
+   preview session id, run the trace list and trace read actions
+   commands, and preserve the actions detail with the run record.
+   No invented spec fields are used.
 """
 import json
 import os
@@ -33,7 +49,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 DEFAULT_ROOT = Path(__file__).resolve().parents[2]
-CONVERTER_VERSION = "1.0.0"
+CONVERTER_VERSION = "1.1.0"
 
 TOPIC_FOR_EXPECT = {
   "run_triage": "triage_case",
@@ -68,7 +84,7 @@ def validate(catalog):
   for idx, case in enumerate(scenarios):
     if not isinstance(case, dict):
       return fail("scenario index %d is not an object" % idx)
-    for key in ("id", "category", "input", "apex_outcome", "agent_expect"):
+    for key in ("id", "category", "input", "apex_outcome", "agent_expect", "requires_action"):
       if key not in case:
         return fail("scenario index %d missing key %s" % (idx, key))
     sid = case["id"]
@@ -77,6 +93,8 @@ def validate(catalog):
     seen.add(sid)
     if not str(case["input"]).strip():
       return fail("scenario %s has blank input" % sid)
+    if type(case.get("requires_action")) is not bool:
+      return fail("scenario %s requires_action must be true or false" % sid)
     if case["apex_outcome"] == "SUGGESTED":
       if not (case.get("apex_priority") and case.get("apex_queue")):
         return fail("scenario %s SUGGESTED without priority and queue" % sid)
@@ -87,6 +105,10 @@ def validate(catalog):
       return fail("scenario %s has unknown apex_outcome" % sid)
     if case["agent_expect"] not in TOPIC_FOR_EXPECT:
       return fail("scenario %s has unknown agent_expect" % sid)
+    if case["agent_expect"] == "run_triage" and case.get("requires_action") is not True:
+      return fail("scenario %s run_triage without required action is contradictory" % sid)
+    if case["apex_outcome"] == "NEEDS_REVIEW" and case.get("requires_action") is not True:
+      return fail("scenario %s NEEDS_REVIEW without required action is contradictory" % sid)
     turns = case.get("turns")
     if turns is not None:
       ok = validate_turns(sid, turns, case["input"])
@@ -198,7 +220,8 @@ def convert(catalog, subject_name):
     topic = TOPIC_FOR_EXPECT[expect]
     if expect == "clarify" and not str(case["input"]).strip():
       topic = "missing_info"
-    actions = [TRIAGE_ACTION_NAME] if expect == "run_triage" else []
+    requires = case.get("requires_action") is True
+    actions = [TRIAGE_ACTION_NAME] if requires else []
     cases.append({
       "utterance": str(case["input"]),
       "expectedTopic": topic,
@@ -209,7 +232,8 @@ def convert(catalog, subject_name):
     })
     mapping.append({"index": idx, "testNumber": idx + 1,
                     "scenario_id": case["id"], "category": case.get("category"),
-                    "agent_expect": expect, "apex_outcome": case["apex_outcome"]})
+                    "agent_expect": expect, "apex_outcome": case["apex_outcome"],
+                    "requires_action": requires, "required_actions": list(actions)})
   spec = {
     "name": "Service Triage Agent Test",
     "description": "Converted from catalog version %s. Resolve topics and actions against published GenAi metadata before create." % catalog.get("version"),

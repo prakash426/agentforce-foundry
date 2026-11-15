@@ -361,6 +361,21 @@ def resolve_candidate(spec_text, mapping, root, agent, version):
     return None
   if len(cases) != len(mapping["cases"]):
     return fail("spec holds %d cases but mapping holds %d" % (len(cases), len(mapping["cases"])))
+  for idx, case in enumerate(cases):
+    entry = mapping["cases"][idx] if isinstance(mapping["cases"][idx], dict) else {}
+    if "requires_action" not in entry or "required_actions" not in entry:
+      return fail("mapping case %d (%s) lacks action requirements; reconvert with the current converter" % (
+        idx + 1, entry.get("scenario_id", "unknown")))
+    if type(entry.get("requires_action")) is not bool:
+      return fail("mapping case %d (%s) requires_action must be true or false" % (
+        idx + 1, entry.get("scenario_id", "unknown")))
+    required = entry.get("required_actions")
+    if not isinstance(required, list):
+      return fail("mapping case %d (%s) required_actions must be a list" % (
+        idx + 1, entry.get("scenario_id", "unknown")))
+    if required != case.get("expectedActions", []):
+      return fail("mapping case %d (%s) required actions %s disagree with spec expected actions %s" % (
+        idx + 1, entry.get("scenario_id", "unknown"), required, case.get("expectedActions", [])))
   elsewhere_actions = set()
   for path in root.rglob("*-meta.xml"):
     try:

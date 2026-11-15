@@ -224,67 +224,124 @@ class CliNoiseTest(unittest.TestCase):
 
 
 class PublishDiffTest(unittest.TestCase):
-  def test_single_new_version(self):
+  AGENT = "Service_Triage_Agent"
+
+  def diff(self, before_text, after_text, agent=None):
     import tempfile
     with tempfile.TemporaryDirectory() as tmp:
       before = Path(tmp) / "before.txt"
       after = Path(tmp) / "after.txt"
-      before.write_text("v1.botVersion-meta.xml\n")
-      after.write_text("v1.botVersion-meta.xml\nv2\nv2.botVersion-meta.xml\n")
-      code, out, _ = run("publish-diff", str(before), str(after))
-      self.assertEqual(0, code)
-      self.assertEqual("v2", out)
+      before.write_text(before_text)
+      after.write_text(after_text)
+      chosen = self.AGENT if agent is None else agent
+      return run("publish-diff", "--expect-agent", chosen, str(before), str(after))
+
+  def test_single_new_version(self):
+    code, out, _ = self.diff("v1.botVersion-meta.xml\n",
+                             "v1.botVersion-meta.xml\nv2\nv2.botVersion-meta.xml\n")
+    self.assertEqual(0, code)
+    self.assertEqual("v2", out)
 
   def test_no_new_version_rejected(self):
-    import tempfile
-    with tempfile.TemporaryDirectory() as tmp:
-      before = Path(tmp) / "before.txt"
-      after = Path(tmp) / "after.txt"
-      before.write_text("v1\n")
-      after.write_text("v1\n")
-      self.assertEqual(1, run("publish-diff", str(before), str(after))[0])
+    code, _, err = self.diff("v1\n", "v1\n")
+    self.assertEqual(1, code)
+    self.assertIn("none", err)
 
   def test_ambiguous_new_versions_rejected(self):
-    import tempfile
-    with tempfile.TemporaryDirectory() as tmp:
-      before = Path(tmp) / "before.txt"
-      after = Path(tmp) / "after.txt"
-      before.write_text("")
-      after.write_text("v1\nv2\n")
-      self.assertEqual(1, run("publish-diff", str(before), str(after))[0])
+    code, _, err = self.diff("", "v1\nv2\n")
+    self.assertEqual(1, code)
+    self.assertIn("v1, v2", err)
 
   def test_hash_layout_new_version(self):
-    import tempfile
-    with tempfile.TemporaryDirectory() as tmp:
-      before = Path(tmp) / "before.txt"
-      after = Path(tmp) / "after.txt"
-      before.write_text("Service_Triage_Agent#1\nService_Triage_Agent#2\n")
-      after.write_text("Service_Triage_Agent#1\nService_Triage_Agent#2\nService_Triage_Agent#3\n")
-      code, out, _ = run("publish-diff", str(before), str(after))
-      self.assertEqual(0, code)
-      self.assertEqual("v3", out)
+    code, out, _ = self.diff("Service_Triage_Agent#1\nService_Triage_Agent#2\n",
+                             "Service_Triage_Agent#1\nService_Triage_Agent#2\nService_Triage_Agent#3\n")
+    self.assertEqual(0, code)
+    self.assertEqual("v3", out)
 
   def test_mixed_layouts_new_version(self):
-    import tempfile
-    with tempfile.TemporaryDirectory() as tmp:
-      before = Path(tmp) / "before.txt"
-      after = Path(tmp) / "after.txt"
-      before.write_text("v1.botVersion-meta.xml\nv2.botVersion-meta.xml\nService_Triage_Agent#1\nService_Triage_Agent#2\n")
-      after.write_text("v1.botVersion-meta.xml\nv2.botVersion-meta.xml\nService_Triage_Agent#1\nService_Triage_Agent#2\nService_Triage_Agent#3\n")
-      code, out, _ = run("publish-diff", str(before), str(after))
-      self.assertEqual(0, code)
-      self.assertEqual("v3", out)
+    code, out, _ = self.diff(
+      "v1.botVersion-meta.xml\nv2.botVersion-meta.xml\nService_Triage_Agent#1\nService_Triage_Agent#2\n",
+      "v1.botVersion-meta.xml\nv2.botVersion-meta.xml\nService_Triage_Agent#1\nService_Triage_Agent#2\nService_Triage_Agent#3\n")
+    self.assertEqual(0, code)
+    self.assertEqual("v3", out)
 
   def test_missing_retrieval_rejected(self):
+    code, _, err = self.diff("", "")
+    self.assertEqual(1, code)
+    self.assertIn("missing selected agent", err)
+
+  def test_exact_two_agent_collision(self):
+    code, out, _ = self.diff("OtherAgent#2\nService_Triage_Agent#1\n",
+                             "OtherAgent#2\nService_Triage_Agent#1\nService_Triage_Agent#2\n")
+    self.assertEqual(0, code)
+    self.assertEqual("v2", out)
+
+  def test_other_agent_publishing_alone_fails(self):
+    code, _, err = self.diff("OtherAgent#1\nService_Triage_Agent#1\n",
+                             "OtherAgent#1\nOtherAgent#2\nService_Triage_Agent#1\n")
+    self.assertEqual(1, code)
+    self.assertIn("none", err)
+    self.assertIn("Service_Triage_Agent", err)
+
+  def test_two_agents_same_new_version(self):
+    code, out, _ = self.diff("OtherAgent#1\nService_Triage_Agent#1\n",
+                             "OtherAgent#1\nOtherAgent#2\nService_Triage_Agent#1\nService_Triage_Agent#2\n")
+    self.assertEqual(0, code)
+    self.assertEqual("v2", out)
+
+  def test_multiple_new_selected_versions_rejected(self):
+    code, _, err = self.diff("Service_Triage_Agent#1\n",
+                             "Service_Triage_Agent#1\nService_Triage_Agent#2\nService_Triage_Agent#3\n")
+    self.assertEqual(1, code)
+    self.assertIn("v2, v3", err)
+
+  def test_missing_selected_agent_rejected(self):
+    code, _, err = self.diff("OtherAgent#1\n", "OtherAgent#1\nOtherAgent#2\n")
+    self.assertEqual(1, code)
+    self.assertIn("missing selected agent", err)
+
+  def test_similar_names_do_not_match(self):
+    code, _, err = self.diff(
+      "Service_Triage_Agent#1\n",
+      "Service_Triage_Agent#1\nService_Triage_Agent_Extra#2\nService_Triage_Agent2#2\nservice_triage_agent#2\n")
+    self.assertEqual(1, code)
+    self.assertIn("none", err)
+
+  def test_conflicting_removed_version_rejected(self):
+    code, _, err = self.diff("Service_Triage_Agent#1\nService_Triage_Agent#2\n",
+                             "Service_Triage_Agent#1\n")
+    self.assertEqual(1, code)
+    self.assertIn("conflicting", err)
+
+  def test_malformed_expected_token_rejected(self):
+    code, _, err = self.diff("Service_Triage_Agent#1\n",
+                             "Service_Triage_Agent#1\nService_Triage_Agent#x\n")
+    self.assertEqual(1, code)
+    self.assertIn("malformed", err)
+
+  def test_no_blind_highest_version(self):
+    code, _, err = self.diff("Service_Triage_Agent#1\nService_Triage_Agent#3\n",
+                             "Service_Triage_Agent#1\nService_Triage_Agent#3\n")
+    self.assertEqual(1, code)
+    self.assertIn("none", err)
+
+  def test_missing_agent_flag_rejected(self):
     import tempfile
     with tempfile.TemporaryDirectory() as tmp:
       before = Path(tmp) / "before.txt"
       after = Path(tmp) / "after.txt"
-      before.write_text("")
-      after.write_text("")
+      before.write_text("Service_Triage_Agent#1\n")
+      after.write_text("Service_Triage_Agent#1\nService_Triage_Agent#2\n")
       code, _, err = run("publish-diff", str(before), str(after))
       self.assertEqual(1, code)
-      self.assertIn("none", err)
+      self.assertIn("expect-agent", err)
+
+  def test_invalid_agent_rejected(self):
+    code, _, err = self.diff("Service_Triage_Agent#1\n",
+                             "Service_Triage_Agent#1\nService_Triage_Agent#2\n",
+                             agent="bad-name!")
+    self.assertEqual(1, code)
+    self.assertIn("valid API name", err)
 
 
 class AssignmentListTest(unittest.TestCase):

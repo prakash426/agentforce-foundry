@@ -55,8 +55,8 @@ User: Help.
 Agent: I can triage this once I know more. What is the issue, and who or what is affected.
 
 ## Verification
-1. Offline: run the seven python3 check commands in the main README quickstart. All must pass with exit zero.
-2. Org: rerun the Apex tests against installed code and confirm coverage, then run the agent test from the resolved spec and keep the scored evaluation record with commit, version, and run id.
+1. Offline: run the eight python3 check commands in the main README quickstart. All must pass with exit zero.
+2. Org: rerun the Apex tests against installed code and confirm coverage, then run the agent test from the resolved spec and keep the scored evaluation record with commit, version, and run id. Required actions are checked separately from response assertions.
 3. Truthfulness: confirm the agent says suggested and recommend human follow up where needed. It never says routed, assigned, saved, transferred, handed off, or escalated as a completed action in v1.
 
 ## Limitations

@@ -134,7 +134,7 @@ verify_step agent-publish "publish-$AGENT_API_NAME.json"
   ls "force-app/main/default/bots/$AGENT_API_NAME" 2>/dev/null || true
   ls "force-app/main/default/aiAgentDefinitionVersions" 2>/dev/null || true
 } > "publish-after-$AGENT_API_NAME.txt"
-CANDIDATE_VERSION="$(verify_step publish-diff "publish-before-$AGENT_API_NAME.txt" "publish-after-$AGENT_API_NAME.txt")"
+CANDIDATE_VERSION="$(verify_step publish-diff --expect-agent "$AGENT_API_NAME" "publish-before-$AGENT_API_NAME.txt" "publish-after-$AGENT_API_NAME.txt")"
 echo "Candidate agent version: $CANDIDATE_VERSION (retrieval diff; publish JSON carries no version)"
 echo "$CANDIDATE_VERSION" > "candidate-version-$AGENT_API_NAME.txt"
 
