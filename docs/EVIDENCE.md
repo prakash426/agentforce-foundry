@@ -391,3 +391,151 @@ later in order, reusing the existing org plus runtime user.
    response grading, and batch run limits. Direct page fetch was
    refused with 403, so detailed semantics rest on the installed
    sources above.
+
+## Addendum: nested if compile failure fix, offline verification
+
+Branch `bug-fixes` into `foundry-features`.
+Pull request: https://github.com/prakash426/agentforce-foundry/pull/7
+User tested commit: 745b3775ef577d452051750be2b7eb470d2cdc24
+(no newer work at round start; head matched).
+Fix commit: cccd030e818204f7ba579df3db4dce3252abb84c.
+Verified source commit for this record: cccd030e818204f7ba579df3db4dce3252abb84c.
+This record was committed afterward as an evidence only commit; see
+the pull request commits for that commit itself. All verification
+below covers the source tree at cccd030, not the evidence commit.
+This fix work never authenticated to, queried, deployed to,
+published in, activated in, or otherwise touched MY ORG. The user
+ran setup in their own org; local run artifacts from that attempt
+were left untracked and uncommitted.
+
+## User observed compiler failure at 745b377
+
+Setup on the reviewed branch, reusing the existing runtime user,
+reached authoring bundle validation and stopped before publishing.
+The server returned CompileAgentScriptError: AgentScript does not
+support nested 'if' statements, with guidance to combine conditions
+with 'and'/'or' or restructure. Location line 65, column 16,
+reported range lines 65-73. Exit status 1. Cleanup restored the
+local agent file afterward. The CLI update notice printed alongside
+is unrelated to the cause. No candidate was published, the Apex
+step was never reached, and existing activated versions were
+unchanged.
+
+## Why offline checks missed it, and what changed
+
+Prior offline checks matched content markers in the agent file and
+never parsed conditional structure, so the nested shape passed
+every suite. The fix replaces the nested pair with one compound
+condition using `and`, keeping the run block plus all input and
+output bindings with one less indent level. Scoring behavior is
+preserved: run only after a subject exists and only when the
+current request has not been scored. The committed tree holds one
+Agent Script file and this was its only nested conditional; a file
+wide search found no other `if` statements at all. Compilation
+itself stays server side: installed @salesforce/agents sources show
+both validate and publish compile by posting AFScript 2.0.0 content
+to a server endpoint, so no official offline parser exists. The new
+regression is therefore a narrow structural scan, documented as
+such, never described as server side compilation.
+
+## Fix mapped to regression
+
+The validator now scans the agent script for indentation nested
+`if` blocks and fails the bundle check with both line numbers. The
+scan accepts the corrected compound condition, accepts sibling
+conditionals, flags `if` under `else`, and ignores `|` prose
+lines, `#` comments, and quoted strings. It flags lines 65 plus 66
+on the pre-fix file, matching the server report, and stays clean
+on the fixed file plus the official Local Info Agent sample. The
+check runs inside the required foundry-ci offline job through both
+the validator step and the harness unit step.
+
+## Local checks (repo tree at cccd030, run 2026-11-15 16:53 UTC)
+
+1. python3 tests/harness/validate_kits.py exit 0. Eight checks ok.
+2. python3 tests/harness/test_validate_kits.py exit 0. Thirty six
+   tests ok (28 prior preserved plus 8 nested conditional cases:
+   1 validator integration plus 7 focused scan cases).
+3. python3 tests/eval/audit_service_scenarios.py exit 0. Ten audit
+   checks ok. Live execution reported pending by the runner itself.
+4. python3 tests/eval/test_agent_eval_tools.py exit 0. Fifty four
+   tests ok, preserved.
+5. python3 tests/eval/test_resolve_eval_metadata.py exit 0. Nineteen
+   tests ok, preserved.
+6. python3 tests/eval/test_response_contract.py exit 0. Four tests
+   ok, preserved with the edited agent file.
+7. python3 tests/shell/test_verify_sf_output.py exit 0. Fifty eight
+   tests ok, preserved.
+8. python3 tests/shell/test_script_failure_modes.py exit 0. Thirty
+   five tests ok, preserved.
+9. Python total: 206 tests passing (198 prior preserved, 8 added).
+10. python3 tests/eval/convert_service_scenarios.py exit 0. Twenty
+    cases converted.
+11. Bash syntax checks on all five org scripts plus the shared helper
+    plus the fake CLI exit 0.
+12. actionlint 1.7.12 on both workflow files exit 0 with no findings.
+13. Double hyphen scan clean in prose.
+14. No org authorized in this environment; MY ORG untouched by this
+    work.
+
+## CI results (all on cccd030, inspected via jobs plus logs)
+
+1. foundry-ci pull request run
+   https://github.com/prakash426/agentforce-foundry/actions/runs/43738100604
+   success, created 2026-11-15T16:54:36Z. Offline job success.
+   Logs show the harness step with Ran 36 tests OK, proving the new
+   regression executed, plus the contract command with Ran 4 tests
+   OK. Suite counts match local runs exactly: 36, 54, 19, 4, 58,
+   35. Artifact service-triage-audit kept and not expired.
+2. foundry-ci push run
+   https://github.com/prakash426/agentforce-foundry/actions/runs/43738095850
+   success, created 2026-11-15T16:54:33Z. Offline job success.
+3. salesforce-validate pull request run
+   https://github.com/prakash426/agentforce-foundry/actions/runs/43738100555
+   success, created 2026-11-15T16:54:36Z. Org gated jobs success
+   through the honest no secret skip path. Not validation or
+   deployment proof.
+
+## Verification layers, separated honestly
+
+1. Offline verification: done and green, locally and in CI. The
+   corrected bundle is structurally accepted; nothing here claims it
+   compiles on the server.
+2. Server side validation: not run. Pending the user rerun after
+   independent review, starting with the validation only checkpoint
+   in docs/MANUAL_ORG_TEST.md.
+3. Publishing, Apex execution, activation, evaluation, preview: all
+   still pending behind validation, same as before.
+
+## Failures and corrections
+
+The user observed server compile failure stands as the defect
+record above; the fix plus regression answer it. No post-fix
+verification failures occurred. No test was weakened or removed to
+obtain green.
+
+## Known limitations and unresolved items
+
+1. The corrected bundle has never compiled server side. First
+   re-validation may surface further schema corrections.
+2. The nesting scan is structural only. It tracks `if`/`else`
+   indentation with prose, comment, and quote handling; it is not a
+   grammar parser and cannot prove compilability.
+3. All round four limitations still hold: suggested queues, heuristic
+   word lists, empty custom evaluations, unproven logic run
+   observability, version binding through activation records,
+   smoke check wording, license needs, English only, no record
+   writes, no human transfer.
+
+## Sources inspected in round five
+
+1. Installed @salesforce/agents script agent compile source:
+   compilation posts AFScript 2.0.0 content to a server endpoint;
+   no offline grammar is shipped.
+2. Installed @salesforce/plugin-agent validate command source: it
+   calls the same server compile path.
+3. Official salesforcedx-templates Local Info Agent sample,
+   fetched from the template repo: single level `if` plus `else`
+   usage with no nesting, consistent with the fix shape.
+4. The server error guidance itself, prescribing combined
+   conditions with 'and'/'or', which the fix follows exactly.
