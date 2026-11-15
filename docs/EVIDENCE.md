@@ -162,3 +162,232 @@ bundle shape awaits first validate. Publish JSON carries no version,
 so candidate identity still rests on retrieval diff plus resolver
 report plus recorded activation. Custom JSONPath evaluations ship
 empty. Legacy results expose subject but not version.
+
+## Addendum: PR 7 review findings fix, offline verification
+
+Branch `bug-fixes` into `foundry-features`.
+Pull request: https://github.com/prakash426/agentforce-foundry/pull/7
+Reviewed head at round start: 28f5c2b99a6a94cefeb6f03cc218c72e217205ce
+(PR head, no newer work).
+Fix commit: 24d10f88c6d5129b783388feb94ceb821486f97c.
+Verified source commit for this record: 24d10f88c6d5129b783388feb94ceb821486f97c.
+This record was committed afterward as an evidence only commit; see
+the pull request commits for that commit itself. All verification
+below covers the source tree at 24d10f8, not the evidence commit.
+Two whitespace only uncommitted files in the working tree (the agent
+bundle meta plus the Apex class meta) predate this work and are not
+part of the verified commit. No org was touched; nothing was
+published, activated, deployed, or queried in MIBServiceAgentOrg.
+
+## Findings mapped to fixes and verification
+
+1. Exact agent candidate detection. Publish diff now requires the
+   expected agent identity, filters current layout tokens on exact
+   identity before diffing, treats scoped legacy tokens as the
+   expected agent, rejects removed versions as conflicting, and
+   reports exactly one new version without blind highest version
+   choice. Setup script plus scratch CI pass the identity.
+   Provenance from source commit through published candidate,
+   activation, resolver report, and evaluation is preserved.
+   Verified by 11 new verifier cases plus 6 updated publish diff
+   cases: exact two agent collision, other agent publishing alone,
+   two agents adding the same number, multiple new versions, missing
+   selected agent, legacy plus current plus mixed layouts, similar
+   names, conflicting removed versions, malformed tokens, no blind
+   highest version, missing flag, invalid identity.
+2. Response contract suite in CI. The four locally passing contract
+   tests now run as a required foundry-ci step after the resolver
+   checks, so a failure fails the offline job. README quickstart
+   plus layers table plus testing guide now list the suite
+   accurately as static contract checks, never as live proof. No
+   assertions changed. Verified by local run plus CI log inspection
+   showing the step executing with 4 tests OK in both revised runs.
+3. Independent action requirements. The catalog adds a requires_action
+   flag for every scenario. Normal triage plus REVIEW outcomes
+   require true; bare transfer plus directly routed clarify plus
+   redirect cases stay false. The converter emits expected actions
+   from the flag and records the requirement in the mapping. The
+   resolver checks mapping against spec and resolves required
+   actions against the selected candidate only. The checker verifies
+   required actions in generated actions data and records execution
+   plus assertion results separately; missing evidence cannot pass.
+   Priority and queue rules unchanged. Seeded history is documented
+   as context that never proves earlier execution. The trace list
+   plus trace read actions path is documented for logic run proof;
+   no invented spec fields are used. Verified by 9 converter cases
+   (normal, uncertainty, override, bare transfer, field rules,
+   invalid plus contradictory), 4 execution evidence cases (missing
+   fails, action free passes, JSON evidence, similar names), 3
+   resolver cases (review resolves, outside candidate fails,
+   mapping mismatch fails), 4 harness negatives, and 2 mapping
+   consistency cases.
+
+## Local checks (repo tree at 24d10f8, run 2026-11-15 05:22 UTC)
+
+1. python3 tests/harness/validate_kits.py exit 0. Eight checks ok,
+   including service catalog with action requirements plus docs
+   consistency over 19 real paths.
+2. python3 tests/harness/test_validate_kits.py exit 0. Twenty eight
+   tests ok (24 prior preserved plus 4 action requirement negatives).
+3. python3 tests/eval/audit_service_scenarios.py exit 0. Ten audit
+   checks ok (9 prior plus action requirements). Live execution
+   reported pending by the runner itself.
+4. python3 tests/eval/test_agent_eval_tools.py exit 0. Fifty four
+   tests ok (39 prior preserved plus 15: 2 mapping consistency, 9
+   action requirements, 4 execution evidence).
+5. python3 tests/eval/test_resolve_eval_metadata.py exit 0. Nineteen
+   tests ok (16 prior preserved plus 3 required action resolution).
+6. python3 tests/eval/test_response_contract.py exit 0. Four tests ok,
+   assertions unchanged.
+7. python3 tests/shell/test_verify_sf_output.py exit 0. Fifty eight
+   tests ok (47 prior preserved with 6 publish diff cases updated to
+   the required identity flag, plus 11 new exact agent cases).
+8. python3 tests/shell/test_script_failure_modes.py exit 0. Thirty
+   five tests ok, preserved.
+9. Python total: 198 tests passing (165 prior preserved, 33 added).
+   Every suite exercises meaningful failures: empty and partial
+   coverage, contradictory scorers, unfinished runs, mapping
+   mismatches, missing execution evidence, CLI payload rejections,
+   mocked command failures, and restoration checks.
+10. python3 tests/eval/convert_service_scenarios.py exit 0. Twenty
+    cases converted, ten requiring the action and ten action free.
+11. Resolver check on the real catalog against local version 1
+    metadata exit 0. Twenty cases resolved with layout
+    agent-definition-version.
+12. Bash syntax checks on all five org scripts plus the shared helper
+    plus the fake CLI exit 0.
+13. actionlint 1.7.12 on both workflow files exit 0 with no findings.
+14. JSON parse ok for scratch def, sfdx-project, service catalog,
+    fixtures, turns, and the legacy sample. Manifest XML parses.
+15. Double hyphen scan clean in prose. Markdown table separators plus
+    command flags are required syntax, not prose.
+16. No org is authorized in this environment, so all org gated layers
+    stay pending honestly. MIBServiceAgentOrg was never connected,
+    deployed to, published in, activated in, or modified.
+
+## CI results (all on 24d10f8, inspected via jobs plus logs)
+
+1. foundry-ci pull request run
+   https://github.com/prakash426/agentforce-foundry/actions/runs/43680648705
+   success, created 2026-11-15T05:20:23Z. Offline job success with
+   every step green including run response contract checks. Logs
+   show the contract command executing with Ran 4 tests OK. Suite
+   counts in logs match local runs exactly: 28, 54, 19, 4, 58, 35.
+   Artifact service-triage-audit kept and not expired.
+2. foundry-ci push run
+   https://github.com/prakash426/agentforce-foundry/actions/runs/43680645491
+   success, created 2026-11-15T05:20:20Z. Offline job success with
+   the contract step green.
+3. salesforce-validate pull request run
+   https://github.com/prakash426/agentforce-foundry/actions/runs/43680648683
+   success, created 2026-11-15T05:20:23Z. No DX_AUTH_URL secret
+   present, so validation plus scratch steps skipped and the status
+   job reported not configured honestly with This is not deployment
+   proof messaging. This is a verified honest skip, not validation
+   or deployment proof.
+
+## Verification layers, separated honestly
+
+1. Offline verification: done and green, locally and in CI. Proves
+   structure, schemas, references, transitions, harness behavior,
+   converter with independent action requirements, candidate scoped
+   resolver, parser with execution evidence checks, thresholds,
+   static reply markers, CLI payload verification with exact agent
+   detection, script failure handling, and workflow lint.
+2. Apex execution: not run. No authorized org exists in this
+   environment. Twenty seven Apex tests are committed and await an
+   org run against installed code, including the 2 new uncertainty
+   tests.
+3. Deployment validation: not run. Same reason. The validation only
+   job is ready in CI behind the secret gate with payload
+   verification.
+4. Actual deployment: not run. Nothing has been installed anywhere.
+5. Agent user setup: not run against a real org in this round. Prior
+   live progress (deploy, permission, user creation) stands as
+   observed; the rerun path with the exact agent fix awaits the
+   staged retest.
+6. Publishing: not run in this round. The publish step with exact
+   agent version diffing is automated and mocked but has never
+   executed against a real org with the new flag.
+7. Activation: pending by design in the user org.
+8. Agent evaluation: not run. No live conversation has happened. The
+   static audit plus converter plus resolver plus checker are proven
+   offline; the live run from the resolved spec with required action
+   checks awaits an eligible org.
+9. Sequential preview: not run. Script, modes, and turn fixtures are
+   committed and mocked; no session has started. Trace reads for
+   action proof await the first measured session.
+
+## Failures and corrections
+
+Pre-fix reproductions (expected failures, corrected by the fixes,
+not verification failures): publish diff on the exact two agent
+collision reported none before the fix and v2 after; the converter
+emitted empty actions for REVIEW cases before the fix and the triage
+action after. No post-fix verification failures occurred. Every
+local suite passed on the full run after the final edit, and every
+CI job succeeded on the pushed commit. No test was weakened or
+removed to obtain green. Initial GitHub CLI list commands timed out
+against the API; inspection proceeded through direct REST calls with
+the same credentials and succeeded.
+
+## Manual org verification: deferred
+
+The user will retest after independent review. Nothing below blocks
+this review; follow the staged procedure in docs/MANUAL_ORG_TEST.md
+later in order, reusing the existing org plus runtime user.
+
+## Known limitations and unresolved items
+
+1. The rewritten agent bundle follows documented Agent Script
+   semantics but has never compiled server side. First validate may
+   surface schema corrections. It still awaits execution in the user
+   org.
+2. The 2 new Apex uncertainty tests still await execution in the user
+   org with the other 25.
+3. Queue labels are suggestions, never validated against any org.
+4. Negation and uncertainty word lists are heuristics. Measured runs
+   may require tuning.
+5. Custom JSONPath evaluations ship empty; they need generated data
+   from a first verbose run.
+6. Logic run observability in the selected runner is unproven until
+   the first measured run. If a required action is absent from
+   invoked actions despite trace evidence, use the supported trace
+   path and preserve the actions detail; no invented fields apply.
+7. Legacy evaluation results expose the subject but not the tested
+   version; version binding rests on recorded activation plus
+   disposable org exclusivity, stated in every evaluation record.
+8. Substring smoke checks in preview transcripts are signals, not
+   semantic proof; wording may need tuning after the first measured
+   run.
+9. Agent user creation needs the Einstein Agent User profile with
+   available licenses in the target org; provisioning comes from
+   Agentforce enablement.
+10. English only. No record writes in v1 by design. No human transfer
+    in v1 by design.
+11. No Salesforce org is authorized in this environment, so all org
+    gated proof is pending.
+
+## Sources inspected in round four
+
+1. Installed @salesforce/agents spec translator: empty expectedActions
+   emits no action check; non-empty asserts through the planner
+   actions check with includes items against invoked actions; only
+   user history turns become send steps.
+2. Installed @salesforce/agents test plus results plus handler
+   sources: legacy result shapes with per-expectation verdicts,
+   assertion failures exit zero by design, ERROR cases set the exit.
+3. Installed @salesforce/agents publisher plus connection sources:
+   publish retrieval selects AiAgentDefinition types at org API 68
+   and above with legacy Bot types below, publish JSON carries no
+   version number, versioned full name uses Agent#VersionNumber.
+4. Installed @salesforce/plugin-agent command sources for publish
+   authoring-bundle, activate, test run, plus trace list and trace
+   read: result shapes, version flag behavior, and the actions
+   detail path for execution proof.
+5. Official web search over Salesforce developer plus Testing Center
+   plus Trailhead materials: snippets confirm versioned agent
+   metadata, expected subagent plus expected actions plus expected
+   response grading, and batch run limits. Direct page fetch was
+   refused with 403, so detailed semantics rest on the installed
+   sources above.
