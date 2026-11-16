@@ -539,3 +539,172 @@ obtain green.
    usage with no nesting, consistent with the fix shape.
 4. The server error guidance itself, prescribing combined
    conditions with 'and'/'or', which the fix follows exactly.
+
+## Addendum: access migration plus API pin, offline verification
+
+Branch `bug-fixes` into `foundry-features`.
+Pull request: https://github.com/prakash426/agentforce-foundry/pull/7
+Last reviewed head at round start: a0b8e0b57b414ad3a96b07c0085ba35f44ba3ed0
+(no newer commits; the working tree also held the user's local
+access block edit plus trailing whitespace, preserved into this fix).
+Fix commit: eaed3944abbe6000a2bf982559c3783daf8a7d09.
+Verified source commit for this record: eaed3944abbe6000a2bf982559c3783daf8a7d09.
+This record was committed afterward as an evidence only commit; see
+the pull request commits for that commit itself. All verification
+below covers the source tree at eaed394, not the evidence commit.
+This fix work never authenticated to, queried, deployed to,
+published in, activated in, or otherwise touched MY ORG.
+
+## User observed validation (terminal output, not author executed)
+
+The user ran a validation only checkpoint in their development org
+with the existing runtime user, on a locally modified working tree
+based on 745b377, not on the unchanged PR commit. Attributed
+sequence: a local editing mistake first joined `system:` and
+`instructions:` onto one line and produced an unexpected syntax
+compiler error; the opening lines were repaired; `default_agent_user`
+was moved locally from `config` into `access`; the existing runtime
+username was temporarily substituted; then `sf agent validate
+authoring-bundle -n Service_Triage_Agent` against the chosen org
+returned Status COMPLETED with Errors 0 in about 1.25 seconds; the
+placeholder was restored afterward. The joined opening line was a
+transient local editing error, never a committed defect. Success is
+not attributed to the access migration alone, since the opening
+syntax was repaired as well. No publishing, activation, Apex run,
+or conversation testing happened in that checkpoint, and the pass
+never establishes runtime behavior. No real username, credential,
+or invented artifact path is recorded here. The nested if compiler
+failure and its compound condition fix stand unchanged in the
+record above; the checkpoint compiled that fix clean as part of the
+same tree.
+
+## Changes mapped to checks
+
+1. Access migration. `default_agent_user` moved from `config` to a
+   top-level `access` block with the reusable placeholder; the
+   existing description plus other configuration preserved; `system:`
+   and `instructions:` on separate lines; trailing whitespace
+   removed. Scripts needed no logic change (whole file substitution
+   plus backup restore are location agnostic); the mocked project
+   fixture now mirrors the access shape. Verified by 8 placement
+   tests: access accepted, config placement rejected as deprecated,
+   missing rejected, duplicate rejected, outside access rejected,
+   real username rejected, joined opening lines rejected, plus a
+   committed source scan for exactly one placeholder and no email
+   like strings.
+2. API configuration. Source plus validation manifest pinned at
+   68.0 with a project check enforcing the pin plus a 65.0 floor
+   for AiAuthoringBundle deployment. Version 60.0 stays described
+   as a confirmed configuration mismatch (editor deploy returned
+   not available for deploy at the old pin; the exact API of that
+   call was not captured). Apex classes deliberately stay at 60.0
+   since class API version governs runtime behavior, not metadata
+   deployment. Legacy Bot layout handling plus its tests preserved.
+   Verified by 8 API config tests: pinned 68 accepted, old source
+   fails clearly, old manifest fails, mismatch fails, missing and
+   malformed versions fail, missing files fail, real config pinned.
+3. Validation only helper. New scripts/validate-service-triage.sh
+   gates on CLI capability, resolves the username explicitly or
+   from the setup record, refuses a missing placeholder before any
+   org call, substitutes for validation only, verifies the compile
+   result from JSON, and restores from backup on every exit path.
+   Verified by 5 mocked tests with the fake CLI: explicit user,
+   record file user, missing username stops early, failure
+   restores, missing placeholder stops early. No org was contacted
+   to test it.
+
+## Local checks (repo tree at eaed394, run 2026-11-16 06:51 UTC)
+
+1. python3 tests/harness/validate_kits.py exit 0. Nine checks ok
+   (8 prior plus api-config).
+2. python3 tests/harness/test_validate_kits.py exit 0. Fifty two
+   tests ok (36 prior preserved plus 16: 8 placement plus 8 API).
+3. python3 tests/eval/audit_service_scenarios.py exit 0. Ten audit
+   checks ok. Live execution reported pending by the runner itself.
+4. python3 tests/eval/test_agent_eval_tools.py exit 0. Fifty four
+   tests ok, preserved.
+5. python3 tests/eval/test_resolve_eval_metadata.py exit 0. Nineteen
+   tests ok, preserved.
+6. python3 tests/eval/test_response_contract.py exit 0. Four tests
+   ok, preserved with the edited agent file.
+7. python3 tests/shell/test_verify_sf_output.py exit 0. Fifty eight
+   tests ok, preserved.
+8. python3 tests/shell/test_script_failure_modes.py exit 0. Forty
+   tests ok (35 prior preserved plus 5 helper cases).
+9. Python total: 227 tests passing (206 prior preserved, 21 added).
+10. python3 tests/eval/convert_service_scenarios.py exit 0. Twenty
+    cases converted.
+11. Bash syntax checks on all six org scripts plus the shared helper
+    plus the fake CLI exit 0.
+12. actionlint 1.7.12 on both workflow files exit 0 with no findings.
+13. Double hyphen scan clean in prose.
+14. No org authorized in this environment; MY ORG untouched by this
+    work.
+
+## CI results (all on eaed394, inspected via jobs plus logs)
+
+1. foundry-ci pull request run
+   https://github.com/prakash426/agentforce-foundry/actions/runs/43819791554
+   success, created 2026-11-16T06:52:34Z. Offline job success.
+   Logs show the harness step with Ran 52 tests OK and the mocked
+   step with Ran 40 tests OK, proving the new regressions executed,
+   plus the validator detail naming the access block check and the
+   api-config check. Suite counts match local runs exactly: 52, 54,
+   19, 4, 58, 40. Artifact service-triage-audit kept and not
+   expired.
+2. foundry-ci push run
+   https://github.com/prakash426/agentforce-foundry/actions/runs/43819784709
+   success, created 2026-11-16T06:52:31Z. Offline job success.
+3. salesforce-validate pull request run
+   https://github.com/prakash426/agentforce-foundry/actions/runs/43819791606
+   success, created 2026-11-16T06:52:34Z. Org gated jobs success
+   through the honest no secret skip path. Not validation or
+   deployment proof.
+
+## Verification layers, separated honestly
+
+1. Offline verification: done and green, locally and in CI. The
+   migrated bundle plus API pin are structurally accepted; nothing
+   here claims they compile or deploy on the server.
+2. User checkpoint validation: observed COMPLETED with 0 errors on
+   a locally modified tree, per user terminal output. It covered
+   the nested if fix plus the access move plus repaired opening
+   lines, not this exact commit.
+3. Server side validation of this commit: not run. Pending the user
+   rerun of the validation only helper after independent review.
+4. Publishing, Apex execution, activation, evaluation, preview: all
+   still pending behind validation, same as before.
+
+## Failures and corrections
+
+No post-fix verification failures occurred. No test was weakened
+or removed to obtain green.
+
+## Known limitations and unresolved items
+
+1. The committed migration plus API pin have never compiled or
+   deployed server side. First re-validation may surface further
+   schema corrections.
+2. The placement, nesting, and API checks are structural only, not
+   compilation or deployment proof.
+3. All round five limitations still hold, including unproven logic
+   run observability plus version binding through activation
+   records.
+
+## Sources inspected in round six
+
+1. Task specified Agent Script access block reference plus agent
+   metadata deployment reference plus Metadata API guide PDF
+   (direct fetch refused with 403, as in prior rounds; shapes and
+   minimums implemented from the specified references plus
+   corroboration below).
+2. Installed source-deploy-retrieve metadata registry: directory
+   and type mappings for AiAuthoringBundle, AiAgentDefinition,
+   AiAgentDefinitionVersion with the # separator, legacy Bot plus
+   GenAi types, ApexClass, and PermissionSet. The registry carries
+   no minimum versions.
+3. Deployment tooling references stating AiAuthoringBundle from API
+   65 onward plus GenAi types from API 60, consistent with the
+   observed not available for deploy error at the old 60.0 pin.
+4. Installed @salesforce/agents API 68 gate for the newer agent
+   metadata layout, already verified in round four.
