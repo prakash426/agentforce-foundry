@@ -26,7 +26,7 @@ def make_project(tmp):
   (proj / "config" / "project-scratch-def.json").write_text("{}")
   agent = proj / AGENT_REL
   agent.parent.mkdir(parents=True, exist_ok=True)
-  agent.write_text('config:\n    default_agent_user: "%s"\n' % PLACEHOLDER)
+  agent.write_text('config:\n    developer_name: "Service_Triage_Agent"\n\naccess:\n    default_agent_user: "%s"\n' % PLACEHOLDER)
   bots = proj / "force-app/main/default/bots/Service_Triage_Agent"
   bots.mkdir(parents=True, exist_ok=True)
   (bots / "v1.botVersion-meta.xml").write_text(
@@ -35,6 +35,13 @@ def make_project(tmp):
   (bots / "v2.botVersion-meta.xml").write_text(
     "<BotVersion><conversationDefinitionPlanners><genAiPlannerName>PlannerV2</genAiPlannerName>"
     "</conversationDefinitionPlanners></BotVersion>")
+  versions = proj / "force-app/main/default/aiAgentDefinitionVersions"
+  for num in ("1", "2"):
+    vdir = versions / ("Service_Triage_Agent#%s" % num)
+    vdir.mkdir(parents=True, exist_ok=True)
+    (vdir / ("Service_Triage_Agent#%s.aiAgentDefinitionVersion-meta.xml" % num)).write_text(
+      '<AiAgentDefinitionVersion><genAiPlannerName>Planner%s</genAiPlannerName>'
+      '<version>%s</version></AiAgentDefinitionVersion>' % (num, num))
   bundle = proj / "force-app/main/default/genAiPlannerBundles"
   bundle.mkdir(parents=True, exist_ok=True)
   links = "".join("<localTopicLinks><genAiPluginName>%s</genAiPluginName></localTopicLinks>" % n
@@ -437,6 +444,117 @@ class SetupAllFailureTest(unittest.TestCase):
                              {"DEV_HUB": "fake-hub", "SF_FAIL_AT": "deploy"})
       self.assertNotEqual(0, proc.returncode)
       self.assertNotIn("sf apex run test", log)
+
+
+class AdminPermsetIdempotencyTest(unittest.TestCase):
+  def test_existing_assignment_skips_assign(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      proj, bindir = make_project(tmp)
+      proc, log = run_script(proj, bindir, tmp, "setup-service-triage.sh",
+                             {"DEV_HUB": "fake-hub", "AGENT_USER": "agent@example.com",
+                              "SF_ASSIGN_MODE": "full"})
+      self.assertEqual(0, proc.returncode, msg=proc.stdout + proc.stderr)
+      self.assertIn("already assigned", proc.stdout + proc.stderr)
+      self.assertNotIn("sf org assign permset -n Agentforce_Foundry_Service -o foundry-triage --json", log)
+      self.assertIn("sf apex run test", log)
+
+  def test_new_assignment_assigns_and_confirms(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      proj, bindir = make_project(tmp)
+      proc, log = run_script(proj, bindir, tmp, "setup-service-triage.sh",
+                             {"DEV_HUB": "fake-hub", "AGENT_USER": "agent@example.com",
+                              "SF_ASSIGN_MODE": "thin"})
+      self.assertEqual(0, proc.returncode, msg=proc.stdout + proc.stderr)
+      self.assertIn("sf org assign permset -n Agentforce_Foundry_Service -o foundry-triage --json", log)
+      self.assertIn("sf apex run test", log)
+      confirm = (proj / "permset-confirm-foundry-triage.json").read_text()
+      self.assertIn("Agentforce_Foundry_Service", confirm)
+
+  def test_duplicate_on_assign_continues(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      proj, bindir = make_project(tmp)
+      proc, log = run_script(proj, bindir, tmp, "setup-service-triage.sh",
+                             {"DEV_HUB": "fake-hub", "AGENT_USER": "agent@example.com",
+                              "SF_ASSIGN_MODE": "duplicate"})
+      self.assertEqual(0, proc.returncode, msg=proc.stdout + proc.stderr)
+      self.assertIn("already assigned", proc.stdout + proc.stderr)
+      self.assertIn("sf apex run test", log)
+
+  def test_genuine_assign_failure_stops(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      proj, bindir = make_project(tmp)
+      proc, log = run_script(proj, bindir, tmp, "setup-service-triage.sh",
+                             {"DEV_HUB": "fake-hub", "AGENT_USER": "agent@example.com",
+                              "SF_ASSIGN_MODE": "thin", "SF_FAIL_AT": "assign"})
+      self.assertNotEqual(0, proc.returncode)
+      self.assertNotIn("sf apex run test", log)
+
+  def test_admin_display_failure_stops(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      proj, bindir = make_project(tmp)
+      proc, log = run_script(proj, bindir, tmp, "setup-service-triage.sh",
+                             {"DEV_HUB": "fake-hub",
+                              "AGENT_USER": "agent@example.com", "SF_FAIL_AT": "org-display"})
+      self.assertNotEqual(0, proc.returncode)
+      self.assertNotIn("sf apex run test", log)
+
+
+class ValidateOnlyTest(unittest.TestCase):
+  def test_success_with_explicit_user(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      proj, bindir = make_project(tmp)
+      proc, log = run_script(proj, bindir, tmp, "validate-service-triage.sh",
+                             {"ORG_ALIAS": "fake-org", "RUNTIME_USER": "agent@example.com"})
+      self.assertEqual(0, proc.returncode, msg=proc.stdout + proc.stderr)
+      self.assertIn("sf agent validate authoring-bundle", log)
+      self.assertNotIn("sf agent publish", log)
+      agent_text = (proj / AGENT_REL).read_text()
+      self.assertIn(PLACEHOLDER, agent_text)
+      self.assertNotIn("agent@example.com", agent_text)
+      self.assertTrue((proj / "validate-Service_Triage_Agent.json").exists())
+
+  def test_success_with_record_file_user(self):
+    import json
+    with tempfile.TemporaryDirectory() as tmp:
+      proj, bindir = make_project(tmp)
+      (proj / "agent-user-fake-org.json").write_text(json.dumps({"username": "agent@example.com"}))
+      proc, log = run_script(proj, bindir, tmp, "validate-service-triage.sh",
+                             {"ORG_ALIAS": "fake-org"})
+      self.assertEqual(0, proc.returncode, msg=proc.stdout + proc.stderr)
+      self.assertIn("sf agent validate authoring-bundle", log)
+      self.assertIn(PLACEHOLDER, (proj / AGENT_REL).read_text())
+
+  def test_missing_username_fails_before_org_call(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      proj, bindir = make_project(tmp)
+      proc, log = run_script(proj, bindir, tmp, "validate-service-triage.sh",
+                             {"ORG_ALIAS": "fake-org"})
+      self.assertNotEqual(0, proc.returncode)
+      self.assertNotIn("sf agent validate", log)
+      self.assertIn(PLACEHOLDER, (proj / AGENT_REL).read_text())
+
+  def test_validate_failure_restores_file(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      proj, bindir = make_project(tmp)
+      proc, log = run_script(proj, bindir, tmp, "validate-service-triage.sh",
+                             {"ORG_ALIAS": "fake-org", "RUNTIME_USER": "agent@example.com",
+                              "SF_FAIL_AT": "validate"})
+      self.assertNotEqual(0, proc.returncode)
+      self.assertIn("sf agent validate authoring-bundle", log)
+      agent_text = (proj / AGENT_REL).read_text()
+      self.assertIn(PLACEHOLDER, agent_text)
+      self.assertNotIn("agent@example.com", agent_text)
+      self.assertIn("injected failure", (proj / "validate-Service_Triage_Agent.json").read_text())
+
+  def test_missing_placeholder_fails_before_org_call(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      proj, bindir = make_project(tmp)
+      agent_path = proj / AGENT_REL
+      agent_path.write_text(agent_path.read_text().replace(PLACEHOLDER, "agent@example.com"))
+      proc, log = run_script(proj, bindir, tmp, "validate-service-triage.sh",
+                             {"ORG_ALIAS": "fake-org", "RUNTIME_USER": "agent@example.com"})
+      self.assertNotEqual(0, proc.returncode)
+      self.assertNotIn("sf agent validate", log)
 
 
 if __name__ == "__main__":

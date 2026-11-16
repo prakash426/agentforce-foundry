@@ -29,29 +29,29 @@ Boundaries: no record writes, no real human transfer (v1 has no messaging connec
 
 | Kit | Apex action plus tests | Permission set | Agent bundle | Scenario catalog | Org execution |
 | --- | --- | --- | --- | --- | --- |
-| Service Triage | Ready, 25 tests committed | Ready | Ready, transitions included | Ready, 17 scenarios plus 5 flows | Pending first org run |
+| Service Triage | Ready, 27 tests committed | Ready | Ready, deterministic scoring | Ready, 20 scenarios plus 7 flows | Version 1 failed acceptance; fixes pending retest |
 | Sales Qualification | Ready | Ready | Pending | Legacy sample only | Pending |
 | Internal Help | Ready | Ready | Pending | Legacy sample only | Pending |
 
-Service Triage is the complete starter. Sales and Internal Help ship working Apex actions while their agent integration is still pending.
+Service Triage is the complete starter. Sales and Internal Help ship working Apex actions while their agent integration is still pending. The first live Version 1 conversation behavior failed acceptance testing (fabricated classifications, no action execution, false follow-up promises); see [bug matrix](docs/BUG_MATRIX.md). Fixes in this branch are offline verified only and await staged retest in the existing org.
 
 ## Architecture
 
 ```text
 User message
     |
-triage_router (welcome plus route)
+triage_router (clear state, welcome plus route)
     |            |                 |               |              |
 triage_case  missing_info  ambiguous_request  escalation     off_topic
-    |         (ask once,      (ask once,       (recommend     (redirect,
-    |          back to         back to          human          no triage
-    |          triage)         triage)          follow up)     result)
+    |         (ask once,      (ask once,       (honest        (redirect,
+    |          back to         back to          limits,        no triage
+    |          triage)         triage)          no promises)   result)
     v
-ServiceTriageAction (Apex, invocable)
+collect_details, then deterministic ServiceTriageAction run
     |
-SUGGESTED (priority plus queue plus reason)
-NEEDS_CLARIFICATION (one targeted question)
-NEEDS_REVIEW (human follow up recommendation)
+SUGGESTED (exact priority plus queue plus reason)
+NEEDS_CLARIFICATION (one targeted question, no fields)
+NEEDS_REVIEW (honest human recommendation, no fields)
 ```
 
 Details live in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
@@ -76,7 +76,8 @@ Details live in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - Bash for org scripts (they require `pipefail` plus JSON verification).
 - Salesforce CLI 2.157.8 or newer with the agent plugin. CI pins `@salesforce/cli@2.157.8`, which bundles the validate, publish, activate, and preview session commands. CLI 2.145.6 is proven to lack them; the setup script stops with update guidance on such CLIs. Agent user creation alone works on 2.145.6 and newer.
 - Git plus a GitHub account for the workflows.
-- For org paths: an Agentforce enabled org. Scratch orgs use Developer edition with the Einstein AI platform feature plus agent platform settings from [config/project-scratch-def.json](config/project-scratch-def.json). Source API version 60.0.
+- For org paths: an Agentforce enabled org. Scratch orgs use Developer edition with the Einstein AI platform feature plus agent platform settings from [config/project-scratch-def.json](config/project-scratch-def.json). Source API version 68.0, pinned with the validation manifest. Version 60.0 is a confirmed mismatch for authoring bundle deployment (minimum 65.0); the tested org exposes v68.
+- During staged testing, disable VS Code deploy on save (`salesforcedx-vscode-core.push-or-deploy-on-save.enabled` set to false) so saving a local edit never silently deploys. See the validation only checkpoint in [docs/MANUAL_ORG_TEST.md](docs/MANUAL_ORG_TEST.md).
 
 ## Offline quickstart (no org)
 
@@ -86,11 +87,12 @@ python3 tests/harness/test_validate_kits.py
 python3 tests/eval/audit_service_scenarios.py
 python3 tests/eval/test_agent_eval_tools.py
 python3 tests/eval/test_resolve_eval_metadata.py
+python3 tests/eval/test_response_contract.py
 python3 tests/shell/test_verify_sf_output.py
 python3 tests/shell/test_script_failure_modes.py
 ```
 
-All must exit zero. These prove repo consistency, catalog validity, converter and checker behavior, output verification, and script failure handling. They never prove Apex or agent behavior; that needs an org.
+All must exit zero. These prove repo consistency, catalog validity, converter and checker behavior, static reply markers, output verification, and script failure handling. They never prove Apex or agent behavior, and they never prove the bundle compiles; that needs an org. A nested conditional once passed every offline check and failed server compilation, so static checks never establish that collection ran before scoring in a live turn either.
 
 ## Existing Developer Edition org path
 
@@ -127,12 +129,12 @@ Each stage is distinct. The scripts and CI enforce the order and verify every st
 1. Deploy dependencies: Apex classes plus permission sets install first, so live actions exist before the agent runs.
 2. Validation only deploy (CI): a dry run of the Service manifest with its own test and coverage results. Validation saves nothing and proves nothing about installed code.
 3. Runtime user: create an agent user with the supported CLI command, or verify a supplied existing user, then assign the custom Service permission set to that user. Validation and publishing never run without a valid user.
-4. Authoring bundle validation: `sf agent validate` compiles the Agent Script. A pass means it compiles, not that it is published.
-5. Publish: `sf agent publish` creates an inactive candidate version plus its Bot and planner metadata, retrieved back to the project. Deployment alone never creates a version.
+4. Authoring bundle validation: `sf agent validate` compiles the Agent Script. A pass means it compiles, not that it is published and not that it behaves correctly at runtime. Run the validation only helper first after any bundle edit; see the manual checkpoint.
+5. Publish: `sf agent publish` creates an inactive candidate version plus its agent metadata, retrieved back to the project in either the legacy bots layout or the current aiAgentDefinitionVersions layout. Deployment alone never creates a version. Publish JSON carries no version number; the candidate is identified from the retrieval diff for the exact agent identity, filtered before comparing versions. Similar agent names never match.
 6. Activate: `sf agent activate` makes one version live. Publishing leaves versions inactive by design. Activation in your own org stays an explicit manual choice; CI activates only inside its disposable scratch org.
-7. Apex tests: run against installed candidate code with coverage kept.
-8. Agent evaluation: convert committed scenarios to a test spec, resolve names against the selected candidate version only, create the test, run it, and score results against catalog thresholds with commit, version, and run id recorded.
-9. Sequential preview (optional): send scripted multi-turn conversations through preview sessions and keep transcripts.
+7. Apex tests: run against installed candidate code with coverage kept. Twenty seven tests are committed; the two new uncertainty tests await org execution.
+8. Agent evaluation: convert committed scenarios to a test spec with required actions from the independent catalog flag (not from final response behavior alone), resolve names against the selected candidate version only, create the test, run it, and score results against catalog thresholds with commit, version, and run id recorded. Scoring separates required action execution evidence from assertion verdicts. Seeded history never proves earlier turns executed.
+9. Sequential preview (optional): send scripted multi-turn conversations through preview sessions and keep transcripts. Use trace reads for action execution proof when needed.
 
 ## Agent user and permissions
 
@@ -142,7 +144,7 @@ The runtime user needs org platform entitlements plus the custom Apex permission
 - Licenses: the org must offer the agent user profile with available user licenses. Creation checks this and fails with guidance when licenses are absent or exhausted. Provisioning comes from Agentforce enablement; contact the account team for more.
 - Platform permission sets, assigned by the creation command: `AgentforceServiceAgentBase`, `AgentforceServiceAgentUser`, `EinsteinGPTPromptTemplateUser`.
 - Custom permission set: `Agentforce_Foundry_Service`, assigned by the setup scripts to the admin user and to the runtime user, granting Apex class access.
-- The committed agent file holds an `UPDATE_WITH_DEFAULT_AGENT_USER` placeholder. Scripts resolve it to the established runtime user for validation and publishing only, then restore the placeholder automatically. Never commit a real username.
+- The committed agent file holds an `UPDATE_WITH_DEFAULT_AGENT_USER` placeholder under the top-level `access` block (`access.default_agent_user`; the old `config` placement is deprecated and rejected by project checks). Scripts resolve it to the established runtime user for validation and publishing only, then restore the placeholder automatically from a file backup that preserves unrelated local edits. Never commit a real username.
 - Creation is automatic in scratch orgs (`scripts/setup-agent-user.sh` runs inside setup). In an existing org, either let the script create a user or export `AGENT_USER` with a username to verify; verification requires an active user with the required profile and platform permission sets.
 
 ## Example conversations (unexecuted)
@@ -150,7 +152,7 @@ The runtime user needs org platform entitlements plus the custom Apex permission
 These examples are illustrative. No live conversation has happened yet; they will be replaced with measured transcripts after the first org run.
 
 User: Checkout is down everywhere, registers frozen since 9am.
-Agent: Suggested priority High for queue Critical_Response. Reason: severity signals found: down. This is a suggestion only. Want me to prepare a handoff note for the on call queue.
+Agent: Suggested priority High for queue Critical_Response. Reason: severity signals found: down. This is a suggestion only. For human follow up, contact your support channel directly with this suggestion as context.
 
 User: Where is my refund for March.
 Agent: Suggested priority Medium for queue Billing. Reason: billing signals found: refund. This is a suggestion only. Anything else on this order.
@@ -167,6 +169,7 @@ Agent: I can triage this once I know more. What is the issue, and who or what is
 | Scenario audit | `python3 tests/eval/audit_service_scenarios.py` | Catalog completeness, always pending live |
 | Converter plus checker | `python3 tests/eval/test_agent_eval_tools.py` | Spec conversion, scoring, thresholds |
 | Metadata resolver | `python3 tests/eval/test_resolve_eval_metadata.py` | Topic and action name resolution |
+| Response contract | `python3 tests/eval/test_response_contract.py` | Static reply markers, never live proof |
 | Output verifier | `python3 tests/shell/test_verify_sf_output.py` | CLI payload success markers |
 | Script failure modes | `python3 tests/shell/test_script_failure_modes.py` | Fail stop behavior plus file restoration |
 | Apex tests (needs org) | `sf apex run test -n ServiceTriageActionTest` | Classifier contract on installed code |
@@ -178,7 +181,8 @@ CI runs every offline layer on each push and pull request, plus honest org gated
 ## Guides and evidence
 
 - [Evidence record](docs/EVIDENCE.md): verified commits, commands, CI links, and pending layers.
-- [Manual org test guide](docs/MANUAL_ORG_TEST.md): hands on procedure for the first live run.
+- [Bug matrix](docs/BUG_MATRIX.md): acceptance failures mapped to fixes, regressions, and retest status.
+- [Manual org test guide](docs/MANUAL_ORG_TEST.md): hands on procedure for the first live run plus staged retest.
 - [Merge order](docs/MERGE_ORDER.md): branch flow and conflict avoidance.
 - [Testing guide](docs/TESTING.md): layers, thresholds, and CI behavior.
 - [Service kit guide](kits/service-triage/README.md): contract, setup, verification, and troubleshooting.
@@ -186,11 +190,13 @@ CI runs every offline layer on each push and pull request, plus honest org gated
 
 ## Known limitations
 
-- No org execution has happened yet: Apex runs, deployment, publishing, activation, preview, and agent evaluation are all pending a first authorized org.
-- Agent bundle syntax follows official template patterns and locally verified command shapes but has never compiled server side.
+- Version 1 reached an org (deploy, user setup, validation, publish, 25 Apex tests, activation) but its conversations failed acceptance testing. The fixes here are offline verified only; no fix is org verified before retesting.
+- The rewritten agent bundle uses deterministic logic plus prompt instructions following documented Agent Script semantics. The nested `if` fix compiled clean (0 errors) during a user run validation checkpoint on a locally modified tree; the committed access block migration plus API pin still await server side validation plus execution in the user org. A validation pass never establishes runtime behavior.
+- Twenty seven Apex tests are committed; the two new uncertainty tests still await execution in the user org.
 - Queue labels are suggestions, never validated against any org.
 - Negation and uncertainty word lists are heuristics; measured runs may require tuning.
-- Converter topic and action names resolve against retrieved metadata; custom JSONPath evaluations ship empty until a first verbose run.
+- Converter topic and action names resolve against retrieved metadata; required actions come from the independent catalog flag and are checked separately from response assertions. Custom JSONPath evaluations ship empty until a first verbose run. Logic run observability in the runner is unproven until the first measured run; use trace reads for action proof when needed.
+- Publish JSON carries no version number; candidate identity rests on the exact agent retrieval diff plus resolver report plus recorded activation.
 - English only. No record writes in v1. No human transfer in v1.
 - Legacy evaluation results expose the subject but not the tested version; version binding rests on recorded activation plus disposable org exclusivity.
 

@@ -17,8 +17,13 @@ sources (types AgentTestResultsResponse and TestCaseResult):
   verdicts with name, result (PASS, FAILURE, or null when unfinished),
   status, score, actual and expected values, and error detail. The CLI
   writes this payload to test-result-<runId>.json and prints runId on
-  stdout with --json. Verdicts come from the per-expectation results,
-  never from a generic execution status.
+  stdout with --json. Assertion verdicts come from the per-expectation
+  results, never from a generic execution status. Required action
+  execution is verified separately from generatedData actionsSequence
+  and invokedActions against the mapping required actions; a case
+  with passing assertions but missing required action evidence still
+  fails. Execution success and assertion success are recorded
+  separately in every evaluated case.
 
 Inputs:
   --results PATH   results JSON file, or a directory holding JSON files
@@ -149,6 +154,48 @@ def case_verdict(test_case):
   return "PASS", [], expectations
 
 
+def execution_verdict(test_case, required_actions):
+  """Verify required action evidence in generatedData. Returns (ok, notes, found)."""
+  if not required_actions:
+    return True, [], []
+  generated = test_case.get("generatedData") if isinstance(test_case.get("generatedData"), dict) else {}
+  actions_seq = generated.get("actionsSequence") if isinstance(generated.get("actionsSequence"), list) else []
+  invoked = generated.get("invokedActions", "")
+  found = []
+  missing = []
+  for action in required_actions:
+    hit = False
+    if action in actions_seq:
+      hit = True
+    elif isinstance(invoked, list) and action in invoked:
+      hit = True
+    elif isinstance(invoked, str) and invoked:
+      try:
+        parsed = json.loads(invoked)
+        if isinstance(parsed, list) and action in parsed:
+          hit = True
+        elif isinstance(parsed, dict):
+          blob = json.dumps(parsed)
+          if re.search(r"\b%s\b" % re.escape(action), blob):
+            hit = True
+        elif not hit and re.search(r"\b%s\b" % re.escape(action), invoked):
+          hit = True
+      except Exception:
+        if re.search(r"\b%s\b" % re.escape(action), invoked):
+          hit = True
+    elif isinstance(invoked, dict):
+      blob = json.dumps(invoked)
+      if re.search(r"\b%s\b" % re.escape(action), blob):
+        hit = True
+    if hit:
+      found.append(action)
+    else:
+      missing.append(action)
+  if missing:
+    return False, ["missing required action evidence: %s not in generatedData actionsSequence or invokedActions" % ", ".join(missing)], found
+  return True, [], found
+
+
 def check_mapping(mapping, catalog):
   manifest_cases = mapping.get("cases")
   if not isinstance(manifest_cases, list) or not manifest_cases:
@@ -174,9 +221,19 @@ def check_mapping(mapping, catalog):
     scenario = catalog_by_id.get(sid)
     if scenario is None:
       return fail("mapped scenario %s is missing from the catalog" % sid)
-    for field in ("category", "agent_expect", "apex_outcome"):
+    for field in ("category", "agent_expect", "apex_outcome", "requires_action"):
       if entry.get(field) != scenario.get(field):
         return fail("mapping field %s for %s disagrees with the catalog" % (field, sid))
+    required = entry.get("required_actions")
+    if not isinstance(required, list):
+      return fail("mapping required_actions for %s must be a list; reconvert with the current converter" % sid)
+    if entry.get("requires_action") is True and not required:
+      return fail("mapping for %s requires an action but lists none" % sid)
+    if entry.get("requires_action") is not True and required:
+      return fail("mapping for %s lists required actions without requires_action" % sid)
+    for action in required:
+      if not isinstance(action, str) or not action.strip():
+        return fail("mapping for %s holds a malformed required action" % sid)
   catalog_ids = set(catalog_by_id)
   if seen_ids != catalog_ids:
     missing = sorted(catalog_ids - seen_ids)
@@ -266,18 +323,37 @@ def check(results_path, map_path, catalog_path, commit, agent_version, run_id, p
     if manifest is None:
       fail("result testNumber %s is not in the mapping" % number)
       return None
-    status, notes, expectations = case_verdict(test_case)
+    assertion_status, assertion_notes, expectations = case_verdict(test_case)
+    required_actions = manifest.get("required_actions", [])
+    execution_ok, execution_notes, found_actions = execution_verdict(test_case, required_actions)
+    assertion_ok = assertion_status == "PASS"
+    if assertion_status in ("ERROR", "UNFINISHED", "MALFORMED"):
+      status = assertion_status
+      notes = assertion_notes + execution_notes
+    elif assertion_ok and execution_ok:
+      status = "PASS"
+      notes = []
+    else:
+      status = "FAIL"
+      notes = assertion_notes + execution_notes
     generated = test_case.get("generatedData", {}) if isinstance(test_case.get("generatedData"), dict) else {}
+    actions_seq = generated.get("actionsSequence") if isinstance(generated.get("actionsSequence"), list) else []
     evaluated.append({
       "testNumber": number,
       "scenario_id": manifest.get("scenario_id"),
       "category": manifest.get("category"),
       "agent_expect": manifest.get("agent_expect"),
+      "requires_action": manifest.get("requires_action", False),
+      "required_actions": required_actions,
       "status": status,
+      "assertion_ok": assertion_ok,
+      "execution_ok": execution_ok,
       "notes": notes,
       "expectations": expectations,
       "actual_topic": str(generated.get("topic", ""))[:200],
       "actual_outcome": str(generated.get("outcome", ""))[:300],
+      "actual_actions": [str(a)[:120] for a in actions_seq[:10]],
+      "found_required_actions": found_actions,
     })
   missing_numbers = sorted(set(by_number) - seen_numbers)
   if missing_numbers:

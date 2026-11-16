@@ -72,6 +72,17 @@ def audit(root):
     record("agent-expect-values", False, "unknown agent_expect values: " + ", ".join(bad_expect))
   else:
     record("agent-expect-values", True, "every scenario uses a supported agent_expect value")
+  bad_action = sorted({str(c.get("id")) for c in scenarios
+                       if type(c.get("requires_action")) is not bool})
+  contradictory = sorted(str(c.get("id")) for c in scenarios
+                         if (c.get("agent_expect") == "run_triage" and c.get("requires_action") is not True)
+                         or (c.get("apex_outcome") == "NEEDS_REVIEW" and c.get("requires_action") is not True))
+  if bad_action:
+    record("action-requirements", False, "scenarios without boolean requires_action: " + ", ".join(bad_action))
+  elif contradictory:
+    record("action-requirements", False, "contradictory action requirements: " + ", ".join(contradictory))
+  else:
+    record("action-requirements", True, "every scenario declares action execution independently of response behavior")
 
   fixture_path = root / "tests" / "fixtures" / "service-triage-inputs.json"
   try:

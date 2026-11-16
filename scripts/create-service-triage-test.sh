@@ -4,10 +4,11 @@
 # create the test, optionally run it and score results.
 #
 # Prerequisites: candidate revision deployed, agent published, and the
-# publish retrieval present locally (GenAi metadata under force-app).
+# publish retrieval present locally (agent metadata under force-app,
+# either bots or aiAgentDefinitionVersions layout).
 # For legacy tests the run exercises the activated agent version, so
 # activate the candidate version first and pass it as AGENT_VERSION.
-# The script verifies a matching local BotVersion file exists; the
+# The script verifies matching local candidate metadata exists; the
 # binding is recorded as operator asserted, because legacy results do
 # not expose the tested version. See the evaluation record limitation.
 #
@@ -39,11 +40,17 @@ python3 tests/eval/resolve_eval_metadata.py --spec "$SPEC" --map "$MAP" \
 
 echo "Step 3 of 5: confirm candidate version $AGENT_VERSION exists locally"
 VERSION_NUM="$(echo "$AGENT_VERSION" | sed 's/^v//')"
-if ! ls "force-app/main/default/bots/$SUBJECT/v$VERSION_NUM.botVersion-meta.xml" >/dev/null 2>&1; then
-  echo "No local BotVersion file for $SUBJECT version $AGENT_VERSION. Publish must retrieve first." >&2
+LEGACY_FILE="force-app/main/default/bots/$SUBJECT/v$VERSION_NUM.botVersion-meta.xml"
+CURRENT_DIR="force-app/main/default/aiAgentDefinitionVersions/$SUBJECT#$VERSION_NUM"
+if [ -f "$LEGACY_FILE" ]; then
+  echo "Found local BotVersion for $SUBJECT version $AGENT_VERSION (operator asserts it is the active one)."
+elif [ -d "$CURRENT_DIR" ] && ls "$CURRENT_DIR"/*.aiAgentDefinitionVersion-meta.xml >/dev/null 2>&1; then
+  echo "Found local agent definition version for $SUBJECT version $AGENT_VERSION (operator asserts it is the active one)."
+else
+  echo "No local candidate metadata for $SUBJECT version $AGENT_VERSION." >&2
+  echo "Checked $LEGACY_FILE and $CURRENT_DIR. Publish must retrieve first." >&2
   exit 1
 fi
-echo "Found local BotVersion for $SUBJECT version $AGENT_VERSION (operator asserts it is the active one)."
 
 echo "Step 4 of 5: create test $TEST_API_NAME in org $ALIAS"
 run_step "create agent test" "test-create-$TEST_API_NAME.json" \

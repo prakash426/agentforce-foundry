@@ -13,5 +13,5 @@
     <members>Agentforce_Foundry_Service</members>
     <name>PermissionSet</name>
   </types>
-  <version>60.0</version>
+  <version>68.0</version>
 </Package>

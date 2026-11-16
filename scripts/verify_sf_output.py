@@ -28,6 +28,19 @@ verified against installed plugin sources:
   and all three platform permission sets assigned.
 - user-query: exactly one active user record with the expected profile.
 - assignment-query: permission set assignments covering expected names.
+- assignment-list: permission set assignment query shape check that prints
+  found names without requiring any, so callers can branch on membership.
+- permset-duplicate: true only when a permset assign payload carries a
+  Duplicate PermissionSetAssignment failure; all other shapes fail.
+- publish-diff: exactly one new version for one exact agent identity,
+  filtered before diffing. Legacy vN tokens come from the scoped
+  bots/<Agent> listing and belong to the expected agent. Newer
+  Agent#N tokens come from the shared aiAgentDefinitionVersions
+  listing and match only on exact agent identity, using the
+  documented AiAgentDefinitionVersion full name Agent#VersionNumber.
+  Similar names never match. Missing, malformed, conflicting, or
+  ambiguous evidence fails. The highest version is never chosen
+  without a before and after diff.
 - json: generic oclif envelope with top-level status zero.
 
 Usage: python3 scripts/verify_sf_output.py <subcommand> <file> [options]
@@ -229,25 +242,83 @@ def cmd_agent_test_run(args):
 
 
 def cmd_publish_diff(args):
-  if len(args) != 2:
-    return fail("usage: publish-diff <before-listing> <after-listing>")
+  expect_agent = None
+  rest = []
+  it = iter(args)
+  for arg in it:
+    if arg == "--expect-agent":
+      try:
+        expect_agent = next(it)
+      except StopIteration:
+        return fail("publish-diff needs a value after --expect-agent")
+    else:
+      rest.append(arg)
+  if len(rest) != 2 or not expect_agent:
+    return fail("usage: publish-diff --expect-agent NAME <before-listing> <after-listing>")
+  import re
+  if len(expect_agent) > 80 or not re.match(r"^[A-Za-z][A-Za-z0-9_]*$", expect_agent):
+    return fail("publish-diff expected agent %s is not a valid API name" % expect_agent)
+  if expect_agent.endswith("_"):
+    return fail("publish-diff expected agent %s is not a valid API name" % expect_agent)
   try:
-    before = set(Path(args[0]).read_text().split())
-    after = set(Path(args[1]).read_text().split())
+    before_tokens = Path(rest[0]).read_text().split()
+    after_tokens = Path(rest[1]).read_text().split()
   except Exception as exc:
     return fail("cannot read version listings: %s" % exc)
-  import re
-  def versions(names):
-    found = set()
-    for token in names:
-      match = re.match(r"v(\d+)\b", token)
-      if match:
-        found.add(int(match.group(1)))
-    return found
-  new_versions = sorted(versions(after) - versions(before))
+
+  def parse_for_agent(tokens):
+    versions = set()
+    malformed = []
+    for token in tokens:
+      if "#" in token:
+        agent_part, _, version_rest = token.partition("#")
+        if "/" in agent_part:
+          agent_part = agent_part.rsplit("/", 1)[-1]
+        if agent_part != expect_agent:
+          continue
+        match = re.match(r"(\d+)", version_rest)
+        if not match:
+          malformed.append(token)
+          continue
+        trailing = version_rest[match.end():]
+        if trailing and (trailing[0].isalnum() or trailing[0] == "_"):
+          malformed.append(token)
+          continue
+        versions.add(int(match.group(1)))
+      elif token.startswith("v"):
+        match = re.match(r"v(\d+)", token)
+        if not match:
+          continue
+        trailing = token[match.end():]
+        if trailing and (trailing[0].isalnum() or trailing[0] == "_"):
+          malformed.append(token)
+          continue
+        versions.add(int(match.group(1)))
+      else:
+        if token == expect_agent:
+          malformed.append(token)
+        continue
+    return versions, malformed
+
+  before_versions, before_bad = parse_for_agent(before_tokens)
+  after_versions, after_bad = parse_for_agent(after_tokens)
+  if before_bad or after_bad:
+    bad = sorted(set(before_bad + after_bad))
+    return fail("malformed candidate evidence for agent %s: %s" % (
+      expect_agent, ", ".join(bad[:5])))
+  if not after_versions:
+    return fail("no candidate evidence for agent %s in after listing (missing selected agent)" % expect_agent)
+  removed = sorted(before_versions - after_versions)
+  if removed:
+    return fail("conflicting candidate evidence for agent %s: versions %s present before but missing after" % (
+      expect_agent, ", ".join("v%d" % n for n in removed)))
+  new_versions = sorted(after_versions - before_versions)
+  if len(new_versions) == 0:
+    return fail("expected exactly one new published version for agent %s, found: none" % expect_agent)
   if len(new_versions) != 1:
-    found = ", ".join("v%d" % n for n in new_versions) or "none"
-    return fail("expected exactly one new published version, found: %s" % found)
+    found = ", ".join("v%d" % n for n in new_versions)
+    return fail("expected exactly one new published version for agent %s, found: %s" % (
+      expect_agent, found))
   print("v%d" % new_versions[0])
   return 0
 
@@ -413,6 +484,41 @@ def cmd_assignment_query(args):
   return 0
 
 
+def cmd_assignment_list(args):
+  if len(args) != 1:
+    return fail("usage: assignment-list <file>")
+  data = load(args[0])
+  if data is None:
+    return 1
+  result = unwrap(data)
+  if not isinstance(result, dict) or not isinstance(result.get("records"), list):
+    return fail("assignment query output has no records list")
+  found = set()
+  for record in result["records"]:
+    permset = record.get("PermissionSet", {}) if isinstance(record, dict) else {}
+    if isinstance(permset, dict) and permset.get("Name"):
+      found.add(permset["Name"])
+  print("assignment-list found=%s" % ",".join(sorted(found)))
+  return 0
+
+
+def cmd_permset_duplicate(args):
+  if len(args) != 1:
+    return fail("usage: permset-duplicate <file>")
+  data = load(args[0])
+  if data is None:
+    return 1
+  result = unwrap(data)
+  if not isinstance(result, dict) or not isinstance(result.get("failures"), list):
+    return fail("permset output has no failures list")
+  for failure in result["failures"]:
+    message = failure.get("message", "") if isinstance(failure, dict) else ""
+    if "Duplicate PermissionSetAssignment" in message:
+      print("permset-duplicate already-assigned")
+      return 0
+  return fail("permset output is not a duplicate assignment")
+
+
 def cmd_json(args):
   if len(args) != 1:
     return fail("usage: json <file>")
@@ -438,6 +544,8 @@ COMMANDS = {
   "agent-user-create": cmd_agent_user_create,
   "user-query": cmd_user_query,
   "assignment-query": cmd_assignment_query,
+  "assignment-list": cmd_assignment_list,
+  "permset-duplicate": cmd_permset_duplicate,
   "publish-diff": cmd_publish_diff,
   "json": cmd_json,
 }

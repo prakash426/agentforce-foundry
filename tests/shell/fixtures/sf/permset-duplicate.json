@@ -1,0 +1,13 @@
+{
+  "status": 1,
+  "result": {
+    "successes": [],
+    "failures": [
+      {
+        "name": "test@example.com",
+        "message": "Duplicate PermissionSetAssignment.  Assignee: 005000000000001; Permission Set: 0PS000000000001"
+      }
+    ]
+  },
+  "warnings": []
+}

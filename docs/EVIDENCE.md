@@ -108,3 +108,603 @@ captures stayed local and uncommitted.
    docs/MANUAL_ORG_TEST.md, then activate, preview, and evaluate. The
    rerun should reuse the created runtime user through `AGENT_USER` to
    avoid duplicates.
+
+## Addendum: acceptance-failure fixes, offline verification
+
+Branch `bug-fixes` (from `foundry-features`) into `foundry-features`,
+with four focused fix branches merged in order. Fix branches share
+the `bug-fixes-` prefix and parentage for grouping; git refs cannot
+nest a branch under another branch name, so `bug-fixes/01-...` style
+nesting was not possible. No org was touched; no version was
+published, activated, or deployed from this work. Live retest is
+pending user authorization after independent review.
+
+Fix commits:
+- 3027d61 admin permset idempotency
+  (`bug-fixes-01-admin-permset`).
+- 0e7504f dual retrieval layouts
+  (`bug-fixes-02-metadata-layout`).
+- cec29a8 deterministic scoring plus exact outputs
+  (`bug-fixes-03-triage-execution`).
+- de97952 honest limits plus override preservation
+  (`bug-fixes-04-honest-responses`).
+
+Offline verification on the merged integration tree plus docs
+(run 2026-11-11 19:22 UTC, all exit zero):
+- validate_kits.py ok, including deterministic scoring markers.
+- test_validate_kits.py: 24 tests ok.
+- audit_service_scenarios.py ok on 20 scenarios.
+- test_agent_eval_tools.py: 39 tests ok.
+- test_resolve_eval_metadata.py: 16 tests ok (both layouts).
+- test_response_contract.py: 4 tests ok.
+- test_verify_sf_output.py: 47 tests ok.
+- test_script_failure_modes.py: 35 tests ok.
+- Python total: 165 tests passing.
+- Bash syntax checks on all org scripts plus helpers plus fake CLI.
+- Catalog converts to 20 cases; resolver reports layout per candidate.
+- No double hyphens in prose (verified by scan).
+
+Apex: 27 tests committed (25 prior plus 2 uncertainty). Source checks
+ran offline only; org execution of the 2 new tests is pending. No
+Python copy of Apex logic was substituted for execution.
+
+Live retest pending: staged existing-org procedure in
+docs/MANUAL_ORG_TEST.md with checkpoints for setup rerun, action
+invocation traces, exact reply values, honest limits, uncertainty,
+and override handling. Transcripts and trace evidence must be
+preserved with the run record. See docs/BUG_MATRIX.md for the
+bug-to-regression map. Old Version 1 conversation behavior is failed
+acceptance testing; nothing here claims org verification of fixes.
+
+Remaining limitations: deterministic Agent Script logic follows
+documented semantics but has not compiled server side; the rewritten
+bundle shape awaits first validate. Publish JSON carries no version,
+so candidate identity still rests on retrieval diff plus resolver
+report plus recorded activation. Custom JSONPath evaluations ship
+empty. Legacy results expose subject but not version.
+
+## Addendum: PR 7 review findings fix, offline verification
+
+Branch `bug-fixes` into `foundry-features`.
+Pull request: https://github.com/prakash426/agentforce-foundry/pull/7
+Reviewed head at round start: 28f5c2b99a6a94cefeb6f03cc218c72e217205ce
+(PR head, no newer work).
+Fix commit: 24d10f88c6d5129b783388feb94ceb821486f97c.
+Verified source commit for this record: 24d10f88c6d5129b783388feb94ceb821486f97c.
+This record was committed afterward as an evidence only commit; see
+the pull request commits for that commit itself. All verification
+below covers the source tree at 24d10f8, not the evidence commit.
+Two whitespace only uncommitted files in the working tree (the agent
+bundle meta plus the Apex class meta) predate this work and are not
+part of the verified commit. No org was touched; nothing was
+published, activated, deployed, or queried in MIBServiceAgentOrg.
+
+## Findings mapped to fixes and verification
+
+1. Exact agent candidate detection. Publish diff now requires the
+   expected agent identity, filters current layout tokens on exact
+   identity before diffing, treats scoped legacy tokens as the
+   expected agent, rejects removed versions as conflicting, and
+   reports exactly one new version without blind highest version
+   choice. Setup script plus scratch CI pass the identity.
+   Provenance from source commit through published candidate,
+   activation, resolver report, and evaluation is preserved.
+   Verified by 11 new verifier cases plus 6 updated publish diff
+   cases: exact two agent collision, other agent publishing alone,
+   two agents adding the same number, multiple new versions, missing
+   selected agent, legacy plus current plus mixed layouts, similar
+   names, conflicting removed versions, malformed tokens, no blind
+   highest version, missing flag, invalid identity.
+2. Response contract suite in CI. The four locally passing contract
+   tests now run as a required foundry-ci step after the resolver
+   checks, so a failure fails the offline job. README quickstart
+   plus layers table plus testing guide now list the suite
+   accurately as static contract checks, never as live proof. No
+   assertions changed. Verified by local run plus CI log inspection
+   showing the step executing with 4 tests OK in both revised runs.
+3. Independent action requirements. The catalog adds a requires_action
+   flag for every scenario. Normal triage plus REVIEW outcomes
+   require true; bare transfer plus directly routed clarify plus
+   redirect cases stay false. The converter emits expected actions
+   from the flag and records the requirement in the mapping. The
+   resolver checks mapping against spec and resolves required
+   actions against the selected candidate only. The checker verifies
+   required actions in generated actions data and records execution
+   plus assertion results separately; missing evidence cannot pass.
+   Priority and queue rules unchanged. Seeded history is documented
+   as context that never proves earlier execution. The trace list
+   plus trace read actions path is documented for logic run proof;
+   no invented spec fields are used. Verified by 9 converter cases
+   (normal, uncertainty, override, bare transfer, field rules,
+   invalid plus contradictory), 4 execution evidence cases (missing
+   fails, action free passes, JSON evidence, similar names), 3
+   resolver cases (review resolves, outside candidate fails,
+   mapping mismatch fails), 4 harness negatives, and 2 mapping
+   consistency cases.
+
+## Local checks (repo tree at 24d10f8, run 2026-11-15 05:22 UTC)
+
+1. python3 tests/harness/validate_kits.py exit 0. Eight checks ok,
+   including service catalog with action requirements plus docs
+   consistency over 19 real paths.
+2. python3 tests/harness/test_validate_kits.py exit 0. Twenty eight
+   tests ok (24 prior preserved plus 4 action requirement negatives).
+3. python3 tests/eval/audit_service_scenarios.py exit 0. Ten audit
+   checks ok (9 prior plus action requirements). Live execution
+   reported pending by the runner itself.
+4. python3 tests/eval/test_agent_eval_tools.py exit 0. Fifty four
+   tests ok (39 prior preserved plus 15: 2 mapping consistency, 9
+   action requirements, 4 execution evidence).
+5. python3 tests/eval/test_resolve_eval_metadata.py exit 0. Nineteen
+   tests ok (16 prior preserved plus 3 required action resolution).
+6. python3 tests/eval/test_response_contract.py exit 0. Four tests ok,
+   assertions unchanged.
+7. python3 tests/shell/test_verify_sf_output.py exit 0. Fifty eight
+   tests ok (47 prior preserved with 6 publish diff cases updated to
+   the required identity flag, plus 11 new exact agent cases).
+8. python3 tests/shell/test_script_failure_modes.py exit 0. Thirty
+   five tests ok, preserved.
+9. Python total: 198 tests passing (165 prior preserved, 33 added).
+   Every suite exercises meaningful failures: empty and partial
+   coverage, contradictory scorers, unfinished runs, mapping
+   mismatches, missing execution evidence, CLI payload rejections,
+   mocked command failures, and restoration checks.
+10. python3 tests/eval/convert_service_scenarios.py exit 0. Twenty
+    cases converted, ten requiring the action and ten action free.
+11. Resolver check on the real catalog against local version 1
+    metadata exit 0. Twenty cases resolved with layout
+    agent-definition-version.
+12. Bash syntax checks on all five org scripts plus the shared helper
+    plus the fake CLI exit 0.
+13. actionlint 1.7.12 on both workflow files exit 0 with no findings.
+14. JSON parse ok for scratch def, sfdx-project, service catalog,
+    fixtures, turns, and the legacy sample. Manifest XML parses.
+15. Double hyphen scan clean in prose. Markdown table separators plus
+    command flags are required syntax, not prose.
+16. No org is authorized in this environment, so all org gated layers
+    stay pending honestly. MIBServiceAgentOrg was never connected,
+    deployed to, published in, activated in, or modified.
+
+## CI results (all on 24d10f8, inspected via jobs plus logs)
+
+1. foundry-ci pull request run
+   https://github.com/prakash426/agentforce-foundry/actions/runs/43680648705
+   success, created 2026-11-15T05:20:23Z. Offline job success with
+   every step green including run response contract checks. Logs
+   show the contract command executing with Ran 4 tests OK. Suite
+   counts in logs match local runs exactly: 28, 54, 19, 4, 58, 35.
+   Artifact service-triage-audit kept and not expired.
+2. foundry-ci push run
+   https://github.com/prakash426/agentforce-foundry/actions/runs/43680645491
+   success, created 2026-11-15T05:20:20Z. Offline job success with
+   the contract step green.
+3. salesforce-validate pull request run
+   https://github.com/prakash426/agentforce-foundry/actions/runs/43680648683
+   success, created 2026-11-15T05:20:23Z. No DX_AUTH_URL secret
+   present, so validation plus scratch steps skipped and the status
+   job reported not configured honestly with This is not deployment
+   proof messaging. This is a verified honest skip, not validation
+   or deployment proof.
+
+## Verification layers, separated honestly
+
+1. Offline verification: done and green, locally and in CI. Proves
+   structure, schemas, references, transitions, harness behavior,
+   converter with independent action requirements, candidate scoped
+   resolver, parser with execution evidence checks, thresholds,
+   static reply markers, CLI payload verification with exact agent
+   detection, script failure handling, and workflow lint.
+2. Apex execution: not run. No authorized org exists in this
+   environment. Twenty seven Apex tests are committed and await an
+   org run against installed code, including the 2 new uncertainty
+   tests.
+3. Deployment validation: not run. Same reason. The validation only
+   job is ready in CI behind the secret gate with payload
+   verification.
+4. Actual deployment: not run. Nothing has been installed anywhere.
+5. Agent user setup: not run against a real org in this round. Prior
+   live progress (deploy, permission, user creation) stands as
+   observed; the rerun path with the exact agent fix awaits the
+   staged retest.
+6. Publishing: not run in this round. The publish step with exact
+   agent version diffing is automated and mocked but has never
+   executed against a real org with the new flag.
+7. Activation: pending by design in the user org.
+8. Agent evaluation: not run. No live conversation has happened. The
+   static audit plus converter plus resolver plus checker are proven
+   offline; the live run from the resolved spec with required action
+   checks awaits an eligible org.
+9. Sequential preview: not run. Script, modes, and turn fixtures are
+   committed and mocked; no session has started. Trace reads for
+   action proof await the first measured session.
+
+## Failures and corrections
+
+Pre-fix reproductions (expected failures, corrected by the fixes,
+not verification failures): publish diff on the exact two agent
+collision reported none before the fix and v2 after; the converter
+emitted empty actions for REVIEW cases before the fix and the triage
+action after. No post-fix verification failures occurred. Every
+local suite passed on the full run after the final edit, and every
+CI job succeeded on the pushed commit. No test was weakened or
+removed to obtain green. Initial GitHub CLI list commands timed out
+against the API; inspection proceeded through direct REST calls with
+the same credentials and succeeded.
+
+## Manual org verification: deferred
+
+The user will retest after independent review. Nothing below blocks
+this review; follow the staged procedure in docs/MANUAL_ORG_TEST.md
+later in order, reusing the existing org plus runtime user.
+
+## Known limitations and unresolved items
+
+1. The rewritten agent bundle follows documented Agent Script
+   semantics but has never compiled server side. First validate may
+   surface schema corrections. It still awaits execution in the user
+   org.
+2. The 2 new Apex uncertainty tests still await execution in the user
+   org with the other 25.
+3. Queue labels are suggestions, never validated against any org.
+4. Negation and uncertainty word lists are heuristics. Measured runs
+   may require tuning.
+5. Custom JSONPath evaluations ship empty; they need generated data
+   from a first verbose run.
+6. Logic run observability in the selected runner is unproven until
+   the first measured run. If a required action is absent from
+   invoked actions despite trace evidence, use the supported trace
+   path and preserve the actions detail; no invented fields apply.
+7. Legacy evaluation results expose the subject but not the tested
+   version; version binding rests on recorded activation plus
+   disposable org exclusivity, stated in every evaluation record.
+8. Substring smoke checks in preview transcripts are signals, not
+   semantic proof; wording may need tuning after the first measured
+   run.
+9. Agent user creation needs the Einstein Agent User profile with
+   available licenses in the target org; provisioning comes from
+   Agentforce enablement.
+10. English only. No record writes in v1 by design. No human transfer
+    in v1 by design.
+11. No Salesforce org is authorized in this environment, so all org
+    gated proof is pending.
+
+## Sources inspected in round four
+
+1. Installed @salesforce/agents spec translator: empty expectedActions
+   emits no action check; non-empty asserts through the planner
+   actions check with includes items against invoked actions; only
+   user history turns become send steps.
+2. Installed @salesforce/agents test plus results plus handler
+   sources: legacy result shapes with per-expectation verdicts,
+   assertion failures exit zero by design, ERROR cases set the exit.
+3. Installed @salesforce/agents publisher plus connection sources:
+   publish retrieval selects AiAgentDefinition types at org API 68
+   and above with legacy Bot types below, publish JSON carries no
+   version number, versioned full name uses Agent#VersionNumber.
+4. Installed @salesforce/plugin-agent command sources for publish
+   authoring-bundle, activate, test run, plus trace list and trace
+   read: result shapes, version flag behavior, and the actions
+   detail path for execution proof.
+5. Official web search over Salesforce developer plus Testing Center
+   plus Trailhead materials: snippets confirm versioned agent
+   metadata, expected subagent plus expected actions plus expected
+   response grading, and batch run limits. Direct page fetch was
+   refused with 403, so detailed semantics rest on the installed
+   sources above.
+
+## Addendum: nested if compile failure fix, offline verification
+
+Branch `bug-fixes` into `foundry-features`.
+Pull request: https://github.com/prakash426/agentforce-foundry/pull/7
+User tested commit: 745b3775ef577d452051750be2b7eb470d2cdc24
+(no newer work at round start; head matched).
+Fix commit: cccd030e818204f7ba579df3db4dce3252abb84c.
+Verified source commit for this record: cccd030e818204f7ba579df3db4dce3252abb84c.
+This record was committed afterward as an evidence only commit; see
+the pull request commits for that commit itself. All verification
+below covers the source tree at cccd030, not the evidence commit.
+This fix work never authenticated to, queried, deployed to,
+published in, activated in, or otherwise touched MY ORG. The user
+ran setup in their own org; local run artifacts from that attempt
+were left untracked and uncommitted.
+
+## User observed compiler failure at 745b377
+
+Setup on the reviewed branch, reusing the existing runtime user,
+reached authoring bundle validation and stopped before publishing.
+The server returned CompileAgentScriptError: AgentScript does not
+support nested 'if' statements, with guidance to combine conditions
+with 'and'/'or' or restructure. Location line 65, column 16,
+reported range lines 65-73. Exit status 1. Cleanup restored the
+local agent file afterward. The CLI update notice printed alongside
+is unrelated to the cause. No candidate was published, the Apex
+step was never reached, and existing activated versions were
+unchanged.
+
+## Why offline checks missed it, and what changed
+
+Prior offline checks matched content markers in the agent file and
+never parsed conditional structure, so the nested shape passed
+every suite. The fix replaces the nested pair with one compound
+condition using `and`, keeping the run block plus all input and
+output bindings with one less indent level. Scoring behavior is
+preserved: run only after a subject exists and only when the
+current request has not been scored. The committed tree holds one
+Agent Script file and this was its only nested conditional; a file
+wide search found no other `if` statements at all. Compilation
+itself stays server side: installed @salesforce/agents sources show
+both validate and publish compile by posting AFScript 2.0.0 content
+to a server endpoint, so no official offline parser exists. The new
+regression is therefore a narrow structural scan, documented as
+such, never described as server side compilation.
+
+## Fix mapped to regression
+
+The validator now scans the agent script for indentation nested
+`if` blocks and fails the bundle check with both line numbers. The
+scan accepts the corrected compound condition, accepts sibling
+conditionals, flags `if` under `else`, and ignores `|` prose
+lines, `#` comments, and quoted strings. It flags lines 65 plus 66
+on the pre-fix file, matching the server report, and stays clean
+on the fixed file plus the official Local Info Agent sample. The
+check runs inside the required foundry-ci offline job through both
+the validator step and the harness unit step.
+
+## Local checks (repo tree at cccd030, run 2026-11-15 16:53 UTC)
+
+1. python3 tests/harness/validate_kits.py exit 0. Eight checks ok.
+2. python3 tests/harness/test_validate_kits.py exit 0. Thirty six
+   tests ok (28 prior preserved plus 8 nested conditional cases:
+   1 validator integration plus 7 focused scan cases).
+3. python3 tests/eval/audit_service_scenarios.py exit 0. Ten audit
+   checks ok. Live execution reported pending by the runner itself.
+4. python3 tests/eval/test_agent_eval_tools.py exit 0. Fifty four
+   tests ok, preserved.
+5. python3 tests/eval/test_resolve_eval_metadata.py exit 0. Nineteen
+   tests ok, preserved.
+6. python3 tests/eval/test_response_contract.py exit 0. Four tests
+   ok, preserved with the edited agent file.
+7. python3 tests/shell/test_verify_sf_output.py exit 0. Fifty eight
+   tests ok, preserved.
+8. python3 tests/shell/test_script_failure_modes.py exit 0. Thirty
+   five tests ok, preserved.
+9. Python total: 206 tests passing (198 prior preserved, 8 added).
+10. python3 tests/eval/convert_service_scenarios.py exit 0. Twenty
+    cases converted.
+11. Bash syntax checks on all five org scripts plus the shared helper
+    plus the fake CLI exit 0.
+12. actionlint 1.7.12 on both workflow files exit 0 with no findings.
+13. Double hyphen scan clean in prose.
+14. No org authorized in this environment; MY ORG untouched by this
+    work.
+
+## CI results (all on cccd030, inspected via jobs plus logs)
+
+1. foundry-ci pull request run
+   https://github.com/prakash426/agentforce-foundry/actions/runs/43738100604
+   success, created 2026-11-15T16:54:36Z. Offline job success.
+   Logs show the harness step with Ran 36 tests OK, proving the new
+   regression executed, plus the contract command with Ran 4 tests
+   OK. Suite counts match local runs exactly: 36, 54, 19, 4, 58,
+   35. Artifact service-triage-audit kept and not expired.
+2. foundry-ci push run
+   https://github.com/prakash426/agentforce-foundry/actions/runs/43738095850
+   success, created 2026-11-15T16:54:33Z. Offline job success.
+3. salesforce-validate pull request run
+   https://github.com/prakash426/agentforce-foundry/actions/runs/43738100555
+   success, created 2026-11-15T16:54:36Z. Org gated jobs success
+   through the honest no secret skip path. Not validation or
+   deployment proof.
+
+## Verification layers, separated honestly
+
+1. Offline verification: done and green, locally and in CI. The
+   corrected bundle is structurally accepted; nothing here claims it
+   compiles on the server.
+2. Server side validation: not run. Pending the user rerun after
+   independent review, starting with the validation only checkpoint
+   in docs/MANUAL_ORG_TEST.md.
+3. Publishing, Apex execution, activation, evaluation, preview: all
+   still pending behind validation, same as before.
+
+## Failures and corrections
+
+The user observed server compile failure stands as the defect
+record above; the fix plus regression answer it. No post-fix
+verification failures occurred. No test was weakened or removed to
+obtain green.
+
+## Known limitations and unresolved items
+
+1. The corrected bundle has never compiled server side. First
+   re-validation may surface further schema corrections.
+2. The nesting scan is structural only. It tracks `if`/`else`
+   indentation with prose, comment, and quote handling; it is not a
+   grammar parser and cannot prove compilability.
+3. All round four limitations still hold: suggested queues, heuristic
+   word lists, empty custom evaluations, unproven logic run
+   observability, version binding through activation records,
+   smoke check wording, license needs, English only, no record
+   writes, no human transfer.
+
+## Sources inspected in round five
+
+1. Installed @salesforce/agents script agent compile source:
+   compilation posts AFScript 2.0.0 content to a server endpoint;
+   no offline grammar is shipped.
+2. Installed @salesforce/plugin-agent validate command source: it
+   calls the same server compile path.
+3. Official salesforcedx-templates Local Info Agent sample,
+   fetched from the template repo: single level `if` plus `else`
+   usage with no nesting, consistent with the fix shape.
+4. The server error guidance itself, prescribing combined
+   conditions with 'and'/'or', which the fix follows exactly.
+
+## Addendum: access migration plus API pin, offline verification
+
+Branch `bug-fixes` into `foundry-features`.
+Pull request: https://github.com/prakash426/agentforce-foundry/pull/7
+Last reviewed head at round start: a0b8e0b57b414ad3a96b07c0085ba35f44ba3ed0
+(no newer commits; the working tree also held the user's local
+access block edit plus trailing whitespace, preserved into this fix).
+Fix commit: eaed3944abbe6000a2bf982559c3783daf8a7d09.
+Verified source commit for this record: eaed3944abbe6000a2bf982559c3783daf8a7d09.
+This record was committed afterward as an evidence only commit; see
+the pull request commits for that commit itself. All verification
+below covers the source tree at eaed394, not the evidence commit.
+This fix work never authenticated to, queried, deployed to,
+published in, activated in, or otherwise touched MY ORG.
+
+## User observed validation (terminal output, not author executed)
+
+The user ran a validation only checkpoint in their development org
+with the existing runtime user, on a locally modified working tree
+based on 745b377, not on the unchanged PR commit. Attributed
+sequence: a local editing mistake first joined `system:` and
+`instructions:` onto one line and produced an unexpected syntax
+compiler error; the opening lines were repaired; `default_agent_user`
+was moved locally from `config` into `access`; the existing runtime
+username was temporarily substituted; then `sf agent validate
+authoring-bundle -n Service_Triage_Agent` against the chosen org
+returned Status COMPLETED with Errors 0 in about 1.25 seconds; the
+placeholder was restored afterward. The joined opening line was a
+transient local editing error, never a committed defect. Success is
+not attributed to the access migration alone, since the opening
+syntax was repaired as well. No publishing, activation, Apex run,
+or conversation testing happened in that checkpoint, and the pass
+never establishes runtime behavior. No real username, credential,
+or invented artifact path is recorded here. The nested if compiler
+failure and its compound condition fix stand unchanged in the
+record above; the checkpoint compiled that fix clean as part of the
+same tree.
+
+## Changes mapped to checks
+
+1. Access migration. `default_agent_user` moved from `config` to a
+   top-level `access` block with the reusable placeholder; the
+   existing description plus other configuration preserved; `system:`
+   and `instructions:` on separate lines; trailing whitespace
+   removed. Scripts needed no logic change (whole file substitution
+   plus backup restore are location agnostic); the mocked project
+   fixture now mirrors the access shape. Verified by 8 placement
+   tests: access accepted, config placement rejected as deprecated,
+   missing rejected, duplicate rejected, outside access rejected,
+   real username rejected, joined opening lines rejected, plus a
+   committed source scan for exactly one placeholder and no email
+   like strings.
+2. API configuration. Source plus validation manifest pinned at
+   68.0 with a project check enforcing the pin plus a 65.0 floor
+   for AiAuthoringBundle deployment. Version 60.0 stays described
+   as a confirmed configuration mismatch (editor deploy returned
+   not available for deploy at the old pin; the exact API of that
+   call was not captured). Apex classes deliberately stay at 60.0
+   since class API version governs runtime behavior, not metadata
+   deployment. Legacy Bot layout handling plus its tests preserved.
+   Verified by 8 API config tests: pinned 68 accepted, old source
+   fails clearly, old manifest fails, mismatch fails, missing and
+   malformed versions fail, missing files fail, real config pinned.
+3. Validation only helper. New scripts/validate-service-triage.sh
+   gates on CLI capability, resolves the username explicitly or
+   from the setup record, refuses a missing placeholder before any
+   org call, substitutes for validation only, verifies the compile
+   result from JSON, and restores from backup on every exit path.
+   Verified by 5 mocked tests with the fake CLI: explicit user,
+   record file user, missing username stops early, failure
+   restores, missing placeholder stops early. No org was contacted
+   to test it.
+
+## Local checks (repo tree at eaed394, run 2026-11-16 06:51 UTC)
+
+1. python3 tests/harness/validate_kits.py exit 0. Nine checks ok
+   (8 prior plus api-config).
+2. python3 tests/harness/test_validate_kits.py exit 0. Fifty two
+   tests ok (36 prior preserved plus 16: 8 placement plus 8 API).
+3. python3 tests/eval/audit_service_scenarios.py exit 0. Ten audit
+   checks ok. Live execution reported pending by the runner itself.
+4. python3 tests/eval/test_agent_eval_tools.py exit 0. Fifty four
+   tests ok, preserved.
+5. python3 tests/eval/test_resolve_eval_metadata.py exit 0. Nineteen
+   tests ok, preserved.
+6. python3 tests/eval/test_response_contract.py exit 0. Four tests
+   ok, preserved with the edited agent file.
+7. python3 tests/shell/test_verify_sf_output.py exit 0. Fifty eight
+   tests ok, preserved.
+8. python3 tests/shell/test_script_failure_modes.py exit 0. Forty
+   tests ok (35 prior preserved plus 5 helper cases).
+9. Python total: 227 tests passing (206 prior preserved, 21 added).
+10. python3 tests/eval/convert_service_scenarios.py exit 0. Twenty
+    cases converted.
+11. Bash syntax checks on all six org scripts plus the shared helper
+    plus the fake CLI exit 0.
+12. actionlint 1.7.12 on both workflow files exit 0 with no findings.
+13. Double hyphen scan clean in prose.
+14. No org authorized in this environment; MY ORG untouched by this
+    work.
+
+## CI results (all on eaed394, inspected via jobs plus logs)
+
+1. foundry-ci pull request run
+   https://github.com/prakash426/agentforce-foundry/actions/runs/43819791554
+   success, created 2026-11-16T06:52:34Z. Offline job success.
+   Logs show the harness step with Ran 52 tests OK and the mocked
+   step with Ran 40 tests OK, proving the new regressions executed,
+   plus the validator detail naming the access block check and the
+   api-config check. Suite counts match local runs exactly: 52, 54,
+   19, 4, 58, 40. Artifact service-triage-audit kept and not
+   expired.
+2. foundry-ci push run
+   https://github.com/prakash426/agentforce-foundry/actions/runs/43819784709
+   success, created 2026-11-16T06:52:31Z. Offline job success.
+3. salesforce-validate pull request run
+   https://github.com/prakash426/agentforce-foundry/actions/runs/43819791606
+   success, created 2026-11-16T06:52:34Z. Org gated jobs success
+   through the honest no secret skip path. Not validation or
+   deployment proof.
+
+## Verification layers, separated honestly
+
+1. Offline verification: done and green, locally and in CI. The
+   migrated bundle plus API pin are structurally accepted; nothing
+   here claims they compile or deploy on the server.
+2. User checkpoint validation: observed COMPLETED with 0 errors on
+   a locally modified tree, per user terminal output. It covered
+   the nested if fix plus the access move plus repaired opening
+   lines, not this exact commit.
+3. Server side validation of this commit: not run. Pending the user
+   rerun of the validation only helper after independent review.
+4. Publishing, Apex execution, activation, evaluation, preview: all
+   still pending behind validation, same as before.
+
+## Failures and corrections
+
+No post-fix verification failures occurred. No test was weakened
+or removed to obtain green.
+
+## Known limitations and unresolved items
+
+1. The committed migration plus API pin have never compiled or
+   deployed server side. First re-validation may surface further
+   schema corrections.
+2. The placement, nesting, and API checks are structural only, not
+   compilation or deployment proof.
+3. All round five limitations still hold, including unproven logic
+   run observability plus version binding through activation
+   records.
+
+## Sources inspected in round six
+
+1. Task specified Agent Script access block reference plus agent
+   metadata deployment reference plus Metadata API guide PDF
+   (direct fetch refused with 403, as in prior rounds; shapes and
+   minimums implemented from the specified references plus
+   corroboration below).
+2. Installed source-deploy-retrieve metadata registry: directory
+   and type mappings for AiAuthoringBundle, AiAgentDefinition,
+   AiAgentDefinitionVersion with the # separator, legacy Bot plus
+   GenAi types, ApexClass, and PermissionSet. The registry carries
+   no minimum versions.
+3. Deployment tooling references stating AiAuthoringBundle from API
+   65 onward plus GenAi types from API 60, consistent with the
+   observed not available for deploy error at the old 60.0 pin.
+4. Installed @salesforce/agents API 68 gate for the newer agent
+   metadata layout, already verified in round four.

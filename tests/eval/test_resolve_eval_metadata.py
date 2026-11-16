@@ -30,6 +30,31 @@ BOT_XML = """<?xml version="1.0" encoding="UTF-8"?>
 </BotVersion>
 """
 
+VERSION_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<AiAgentDefinitionVersion xmlns="http://soap.sforce.com/2006/04/metadata">
+  <genAiPlannerName>%s</genAiPlannerName>
+  <planner><fullName>%s</fullName>%s</planner>
+  <status>Inactive</status>
+  <version>%s</version>
+</AiAgentDefinitionVersion>
+"""
+
+
+def version_body(planner, version, topics, actions_by_topic):
+  links = "".join("<localTopicLinks><genAiPluginName>%s</genAiPluginName></localTopicLinks>" % t
+                  for t in topics)
+  blocks = []
+  for topic in topics:
+    actions = actions_by_topic.get(topic, [])
+    action_links = "".join("<localActionLinks><functionName>%s</functionName></localActionLinks>" % a
+                           for a in actions)
+    local_actions = "".join(
+      "<localActions><localDeveloperName>%s</localDeveloperName></localActions>" % a for a in actions)
+    blocks.append("<localTopics><localDeveloperName>%s</localDeveloperName>%s%s</localTopics>" % (
+      topic, action_links, local_actions))
+  inner = links + "".join(blocks)
+  return VERSION_XML % (planner, planner, inner, version)
+
 
 def good_catalog():
   return {
@@ -40,9 +65,9 @@ def good_catalog():
     "scenarios": [
       {"id": "n1", "category": "normal", "input": "Checkout is down",
        "apex_outcome": "SUGGESTED", "apex_priority": "High",
-       "apex_queue": "Critical_Response", "agent_expect": "run_triage", "notes": "n"},
+       "apex_queue": "Critical_Response", "agent_expect": "run_triage", "requires_action": True, "notes": "n"},
       {"id": "a1", "category": "ambiguous", "input": "Help",
-       "apex_outcome": "NEEDS_CLARIFICATION", "agent_expect": "clarify", "notes": "n"},
+       "apex_outcome": "NEEDS_CLARIFICATION", "agent_expect": "clarify", "requires_action": False, "notes": "n"},
     ],
   }
 
@@ -58,13 +83,20 @@ def bundle_body(topics, actions=()):
 
 def write_project(tmp, layout):
   """layout: dict with bots {agent: {version: planner}}, bundles {name: (topics, actions)},
-  plugins {name: action}, plus optional raw files {relpath: content}."""
+  plugins {name: action}, versions {agent: {version: (planner, topics, actions_by_topic)}},
+  plus optional raw files {relpath: content}."""
   root = Path(tmp) / "proj"
   for agent, versions in layout.get("bots", {}).items():
     for version, planner in versions.items():
       path = root / "force-app/main/default/bots" / agent / ("v%s.botVersion-meta.xml" % version)
       path.parent.mkdir(parents=True, exist_ok=True)
       path.write_text(BOT_XML % planner)
+  for agent, versions in layout.get("versions", {}).items():
+    for version, (planner, topics, actions_by_topic) in versions.items():
+      vdir = root / "force-app/main/default/aiAgentDefinitionVersions" / ("%s#%s" % (agent, version))
+      vdir.mkdir(parents=True, exist_ok=True)
+      (vdir / ("%s#%s.aiAgentDefinitionVersion-meta.xml" % (agent, version))).write_text(
+        version_body(planner, version, topics, actions_by_topic))
   for name, (topics, actions) in layout.get("bundles", {}).items():
     path = root / "force-app/main/default/genAiPlannerBundles" / (name + ".genAiPlannerBundle-meta.xml")
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -229,7 +261,7 @@ class CandidateScopeTest(unittest.TestCase):
     catalog = {"catalog": "c", "version": 1, "scenarios": [
       {"id": "f1", "category": "ambiguous", "input": "Checkout is down now",
        "apex_outcome": "SUGGESTED", "apex_priority": "High",
-       "apex_queue": "Critical_Response", "agent_expect": "run_triage", "notes": "n",
+       "apex_queue": "Critical_Response", "agent_expect": "run_triage", "requires_action": True, "notes": "n",
        "turns": [
          {"role": "user", "message": "Help"},
          {"role": "agent", "message": "What is affected?", "agent_expect": "clarify"},
@@ -241,6 +273,112 @@ class CandidateScopeTest(unittest.TestCase):
       spec_path, map_path = convert_to(tmp, catalog)
       self.assertEqual(0, run_resolve(tmp, root, spec_path, map_path))
       self.assertIn("ambiguous_request", (Path(tmp) / "resolved.yaml").read_text())
+
+
+def version_layout():
+  return {
+    "versions": {
+      "SvcA": {
+        "1": ("PlannerA1", ["legacy_triage"], {"legacy_triage": ["legacy_action"]}),
+        "2": ("PlannerA2", ["triage_case", "ambiguous_request"],
+              {"triage_case": ["triage_service_case"], "ambiguous_request": []}),
+      },
+    },
+  }
+
+
+class DefinitionVersionLayoutTest(unittest.TestCase):
+  def test_current_layout_resolves(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      root = write_project(tmp, version_layout())
+      spec_path, map_path = convert_to(tmp, good_catalog())
+      self.assertEqual(0, run_resolve(tmp, root, spec_path, map_path))
+      report = json.loads((Path(tmp) / "report.json").read_text())
+      self.assertEqual("agent-definition-version", report["layout"])
+      self.assertIn("triage_service_case", report["reachable_actions"])
+      self.assertIn("version_file", report)
+
+  def test_missing_retrieval_fails(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      root = write_project(tmp, {"versions": {}})
+      spec_path, map_path = convert_to(tmp, good_catalog())
+      self.assertEqual(1, run_resolve(tmp, root, spec_path, map_path))
+
+  def test_version_mismatch_fails(self):
+    layout = version_layout()
+    layout["raw"] = {"force-app/main/default/aiAgentDefinitionVersions/SvcA#2/wrong-meta.xml":
+                     "<NotAVersion/>"}
+    with tempfile.TemporaryDirectory() as tmp:
+      root = write_project(tmp, layout)
+      vdir = root / "force-app/main/default/aiAgentDefinitionVersions/SvcA#2"
+      for path in vdir.glob("*.xml"):
+        if "wrong" not in path.name:
+          path.write_text(path.read_text().replace("<version>2</version>", "<version>9</version>"))
+      spec_path, map_path = convert_to(tmp, good_catalog())
+      self.assertEqual(1, run_resolve(tmp, root, spec_path, map_path))
+
+  def test_incompatible_format_fails(self):
+    layout = {"versions": {"SvcA": {"2": ("PlannerA2", ["triage_case"], {})}}}
+    layout["raw"] = {}
+    with tempfile.TemporaryDirectory() as tmp:
+      root = write_project(tmp, layout)
+      vdir = root / "force-app/main/default/aiAgentDefinitionVersions/SvcA#2"
+      for path in vdir.glob("*.xml"):
+        path.write_text("<AiAgentDefinitionVersion><oops")
+      spec_path, map_path = convert_to(tmp, good_catalog())
+      self.assertEqual(1, run_resolve(tmp, root, spec_path, map_path))
+
+
+class RequiredActionResolutionTest(unittest.TestCase):
+  def review_catalog(self):
+    return {
+      "catalog": "service-triage",
+      "version": 2,
+      "static_thresholds": {"min_scenarios_per_category": 1},
+      "live_targets": {"normal_outcome_match": 1.0},
+      "scenarios": [
+        {"id": "r1", "category": "escalation", "input": "Outage but may be false alarm",
+         "apex_outcome": "NEEDS_REVIEW", "agent_expect": "escalate",
+         "requires_action": True, "notes": "uncertain review"},
+        {"id": "b1", "category": "escalation", "input": "Please transfer me to a human.",
+         "apex_outcome": "SUGGESTED", "apex_priority": "Low",
+         "apex_queue": "General_Support", "agent_expect": "escalate",
+         "requires_action": False, "notes": "bare transfer"},
+      ],
+    }
+
+  def review_layout(self):
+    layout = standard_layout()
+    layout["bundles"]["PlannerA2"] = (
+      ["triage_case", "ambiguous_request", "escalation"], ["triage_service_case"])
+    layout["plugins"]["escalation"] = "triage_service_case"
+    return layout
+
+  def test_review_action_resolves_to_candidate(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      root = write_project(tmp, self.review_layout())
+      spec_path, map_path = convert_to(tmp, self.review_catalog())
+      self.assertEqual(0, run_resolve(tmp, root, spec_path, map_path))
+      report = json.loads((Path(tmp) / "report.json").read_text())
+      self.assertEqual("v2", report["version"])
+      self.assertIn("triage_service_case", report["reachable_actions"])
+      self.assertEqual(["triage_service_case"], report["decisions"][0]["expectedActions"])
+      self.assertEqual([], report["decisions"][1]["expectedActions"])
+
+  def test_review_action_outside_candidate_rejected(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      root = write_project(tmp, self.review_layout())
+      spec_path, map_path = convert_to(tmp, self.review_catalog())
+      self.assertEqual(1, run_resolve(tmp, root, spec_path, map_path, version="1"))
+
+  def test_mapping_action_mismatch_rejected(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      root = write_project(tmp, self.review_layout())
+      spec_path, map_path = convert_to(tmp, self.review_catalog())
+      manifest = json.loads(Path(map_path).read_text())
+      manifest["cases"][0]["required_actions"] = []
+      Path(map_path).write_text(json.dumps(manifest))
+      self.assertEqual(1, run_resolve(tmp, root, spec_path, map_path))
 
 
 if __name__ == "__main__":
