@@ -26,7 +26,7 @@ def make_project(tmp):
   (proj / "config" / "project-scratch-def.json").write_text("{}")
   agent = proj / AGENT_REL
   agent.parent.mkdir(parents=True, exist_ok=True)
-  agent.write_text('config:\n    default_agent_user: "%s"\n' % PLACEHOLDER)
+  agent.write_text('config:\n    developer_name: "Service_Triage_Agent"\n\naccess:\n    default_agent_user: "%s"\n' % PLACEHOLDER)
   bots = proj / "force-app/main/default/bots/Service_Triage_Agent"
   bots.mkdir(parents=True, exist_ok=True)
   (bots / "v1.botVersion-meta.xml").write_text(
@@ -497,6 +497,64 @@ class AdminPermsetIdempotencyTest(unittest.TestCase):
                               "AGENT_USER": "agent@example.com", "SF_FAIL_AT": "org-display"})
       self.assertNotEqual(0, proc.returncode)
       self.assertNotIn("sf apex run test", log)
+
+
+class ValidateOnlyTest(unittest.TestCase):
+  def test_success_with_explicit_user(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      proj, bindir = make_project(tmp)
+      proc, log = run_script(proj, bindir, tmp, "validate-service-triage.sh",
+                             {"ORG_ALIAS": "fake-org", "RUNTIME_USER": "agent@example.com"})
+      self.assertEqual(0, proc.returncode, msg=proc.stdout + proc.stderr)
+      self.assertIn("sf agent validate authoring-bundle", log)
+      self.assertNotIn("sf agent publish", log)
+      agent_text = (proj / AGENT_REL).read_text()
+      self.assertIn(PLACEHOLDER, agent_text)
+      self.assertNotIn("agent@example.com", agent_text)
+      self.assertTrue((proj / "validate-Service_Triage_Agent.json").exists())
+
+  def test_success_with_record_file_user(self):
+    import json
+    with tempfile.TemporaryDirectory() as tmp:
+      proj, bindir = make_project(tmp)
+      (proj / "agent-user-fake-org.json").write_text(json.dumps({"username": "agent@example.com"}))
+      proc, log = run_script(proj, bindir, tmp, "validate-service-triage.sh",
+                             {"ORG_ALIAS": "fake-org"})
+      self.assertEqual(0, proc.returncode, msg=proc.stdout + proc.stderr)
+      self.assertIn("sf agent validate authoring-bundle", log)
+      self.assertIn(PLACEHOLDER, (proj / AGENT_REL).read_text())
+
+  def test_missing_username_fails_before_org_call(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      proj, bindir = make_project(tmp)
+      proc, log = run_script(proj, bindir, tmp, "validate-service-triage.sh",
+                             {"ORG_ALIAS": "fake-org"})
+      self.assertNotEqual(0, proc.returncode)
+      self.assertNotIn("sf agent validate", log)
+      self.assertIn(PLACEHOLDER, (proj / AGENT_REL).read_text())
+
+  def test_validate_failure_restores_file(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      proj, bindir = make_project(tmp)
+      proc, log = run_script(proj, bindir, tmp, "validate-service-triage.sh",
+                             {"ORG_ALIAS": "fake-org", "RUNTIME_USER": "agent@example.com",
+                              "SF_FAIL_AT": "validate"})
+      self.assertNotEqual(0, proc.returncode)
+      self.assertIn("sf agent validate authoring-bundle", log)
+      agent_text = (proj / AGENT_REL).read_text()
+      self.assertIn(PLACEHOLDER, agent_text)
+      self.assertNotIn("agent@example.com", agent_text)
+      self.assertIn("injected failure", (proj / "validate-Service_Triage_Agent.json").read_text())
+
+  def test_missing_placeholder_fails_before_org_call(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      proj, bindir = make_project(tmp)
+      agent_path = proj / AGENT_REL
+      agent_path.write_text(agent_path.read_text().replace(PLACEHOLDER, "agent@example.com"))
+      proc, log = run_script(proj, bindir, tmp, "validate-service-triage.sh",
+                             {"ORG_ALIAS": "fake-org", "RUNTIME_USER": "agent@example.com"})
+      self.assertNotEqual(0, proc.returncode)
+      self.assertNotIn("sf agent validate", log)
 
 
 if __name__ == "__main__":

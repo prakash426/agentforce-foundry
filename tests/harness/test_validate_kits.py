@@ -56,7 +56,7 @@ class ValidatorShapeTest(unittest.TestCase):
     self.assertIn("checks", out)
     self.assertIn("ok", out)
     self.assertIn("errors", out)
-    self.assertEqual(8, len(out["checks"]))
+    self.assertEqual(9, len(out["checks"]))
 
   def test_real_repo_passes(self):
     out = v.run()
@@ -361,6 +361,147 @@ class NestedConditionalTest(unittest.TestCase):
     text = (ROOT / "force-app/main/default/aiAuthoringBundles/Service_Triage_Agent"
             / "Service_Triage_Agent.agent").read_text()
     self.assertEqual([], v.find_nested_conditionals(text))
+
+
+AGENT_REL = "force-app/main/default/aiAuthoringBundles/Service_Triage_Agent/Service_Triage_Agent.agent"
+AGENT_META_REL = "force-app/main/default/aiAuthoringBundles/Service_Triage_Agent/Service_Triage_Agent.bundle-meta.xml"
+
+
+def full_agent_body(user_block):
+  markers = ("apex://ServiceTriageAction triage_service_case default_agent_user "
+             "back_to_triage go_to_escalation go_to_off_topic "
+             "@utils.transition to @subagent.triage_case "
+             "@utils.transition to @subagent.escalation "
+             "@utils.transition to @subagent.off_topic "
+             "{!@actions.back_to_triage} {!@actions.go_to_escalation} {!@actions.go_to_off_topic} "
+             "run @actions.triage_service_case triage_outcome triage_scored "
+             'set @variables.case_subject = ""')
+  return markers + "\n" + user_block
+
+
+def bundle_root(tmp, body):
+  root = write_fixture(tmp, AGENT_REL, body)
+  write_fixture(tmp, AGENT_META_REL, "<AiAuthoringBundle>AGENT</AiAuthoringBundle>")
+  return root
+
+
+class RuntimeUserPlacementTest(unittest.TestCase):
+  ACCESS = 'access:\n    default_agent_user: "UPDATE_WITH_DEFAULT_AGENT_USER"\n'
+
+  def test_access_placement_passes(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      name, ok, _ = v.check_agent_bundle(bundle_root(tmp, full_agent_body(self.ACCESS)))
+      self.assertEqual("agent-bundle", name)
+      self.assertTrue(ok)
+
+  def test_config_placement_rejected(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      body = full_agent_body('config:\n    default_agent_user: "UPDATE_WITH_DEFAULT_AGENT_USER"\n')
+      _, ok, detail = v.check_agent_bundle(bundle_root(tmp, body))
+      self.assertFalse(ok)
+      self.assertIn("deprecated", detail)
+
+  def test_missing_user_rejected(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      _, ok, detail = v.check_agent_bundle(bundle_root(tmp, full_agent_body("access:\n")))
+      self.assertFalse(ok)
+      self.assertIn("no default_agent_user", detail)
+
+  def test_duplicate_user_rejected(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      body = full_agent_body(self.ACCESS + 'config:\n    default_agent_user: "UPDATE_WITH_DEFAULT_AGENT_USER"\n')
+      _, ok, detail = v.check_agent_bundle(bundle_root(tmp, body))
+      self.assertFalse(ok)
+      self.assertIn("more than once", detail)
+
+  def test_user_outside_access_rejected(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      body = full_agent_body('variables:\n    default_agent_user: "UPDATE_WITH_DEFAULT_AGENT_USER"\n')
+      _, ok, detail = v.check_agent_bundle(bundle_root(tmp, body))
+      self.assertFalse(ok)
+      self.assertIn("outside the access block", detail)
+
+  def test_real_username_rejected(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      body = full_agent_body('access:\n    default_agent_user: "agent@example.com"\n')
+      _, ok, detail = v.check_agent_bundle(bundle_root(tmp, body))
+      self.assertFalse(ok)
+      self.assertIn("reusable placeholder", detail)
+
+  def test_joined_system_instructions_rejected(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      body = 'system: instructions: "broken"\n' + full_agent_body(self.ACCESS)
+      _, ok, detail = v.check_agent_bundle(bundle_root(tmp, body))
+      self.assertFalse(ok)
+      self.assertIn("separate lines", detail)
+
+  def test_committed_source_has_placeholder_once_and_no_emails(self):
+    import re
+    text = (ROOT / AGENT_REL).read_text()
+    self.assertEqual(1, text.count("UPDATE_WITH_DEFAULT_AGENT_USER"))
+    self.assertEqual([], re.findall(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", text))
+
+
+class ApiConfigTest(unittest.TestCase):
+  MANIFEST = ('<?xml version="1.0" encoding="UTF-8"?>\n'
+              '<Package xmlns="http://soap.sforce.com/2006/04/metadata">\n'
+              "  <version>%s</version>\n</Package>\n")
+
+  def run_api(self, tmp, source_version, manifest_version):
+    root = write_fixture(tmp, "sfdx-project.json", json.dumps({"sourceApiVersion": source_version}))
+    if manifest_version is not None:
+      write_fixture(tmp, "manifests/service-triage-validation.xml", self.MANIFEST % manifest_version)
+    return v.check_api_config(root)
+
+  def test_pinned_68_passes(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      name, ok, _ = self.run_api(tmp, "68.0", "68.0")
+      self.assertEqual("api-config", name)
+      self.assertTrue(ok)
+
+  def test_source_too_old_fails(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      _, ok, detail = self.run_api(tmp, "60.0", "60.0")
+      self.assertFalse(ok)
+      self.assertIn("too old", detail)
+      self.assertIn("sourceApiVersion", detail)
+
+  def test_manifest_too_old_fails(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      _, ok, detail = self.run_api(tmp, "68.0", "60.0")
+      self.assertFalse(ok)
+      self.assertIn("too old", detail)
+
+  def test_mismatched_versions_fail(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      _, ok, detail = self.run_api(tmp, "68.0", "65.0")
+      self.assertFalse(ok)
+      self.assertIn("pinned together", detail)
+
+  def test_missing_version_fails(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      root = write_fixture(tmp, "sfdx-project.json", json.dumps({"name": "x"}))
+      _, ok, detail = v.check_api_config(root)
+      self.assertFalse(ok)
+      self.assertIn("no usable", detail)
+
+  def test_malformed_version_fails(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      _, ok, detail = self.run_api(tmp, "abc", "68.0")
+      self.assertFalse(ok)
+      self.assertIn("no usable", detail)
+
+  def test_missing_files_fail(self):
+    with tempfile.TemporaryDirectory() as tmp:
+      _, ok, detail = v.check_api_config(Path(tmp))
+      self.assertFalse(ok)
+      self.assertIn("missing sfdx-project.json", detail)
+
+  def test_real_config_pinned(self):
+    name, ok, detail = v.check_api_config(ROOT)
+    self.assertEqual("api-config", name)
+    self.assertTrue(ok, msg=detail)
+    self.assertIn("68.0", detail)
 
 
 class AuditRunnerTest(unittest.TestCase):

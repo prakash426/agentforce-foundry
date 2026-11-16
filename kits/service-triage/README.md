@@ -33,7 +33,7 @@ Support requests arrive as free text. Someone must decide urgency and the right 
 ## Agent user and permissions
 The setup script establishes the agent runtime user before validation: it creates one with the supported CLI command, or verifies a username supplied through AGENT_USER for active status, the Einstein Agent User profile, and the platform permission sets AgentforceServiceAgentBase, AgentforceServiceAgentUser, and EinsteinGPTPromptTemplateUser. It then assigns the custom Foundry Service permission set to the runtime user. The org must offer the agent user profile with available licenses; creation fails early with guidance otherwise. Apex access alone is never sufficient.
 
-The committed .agent file holds an UPDATE_WITH_DEFAULT_AGENT_USER placeholder. The script resolves it to the established user for validation and publishing only, then restores the placeholder, so no org specific value is committed. Never commit a real username. If user setup fails, the script stops before validation; publishing never runs with a placeholder.
+The committed .agent file holds an UPDATE_WITH_DEFAULT_AGENT_USER placeholder under the top-level access block. The script resolves it to the established user for validation and publishing only, then restores the placeholder from a file backup that preserves unrelated local edits, so no org specific value is committed. Never commit a real username. If user setup fails, the script stops before validation; publishing never runs with a placeholder.
 
 ## Setup (manual, pending first run)
 1. Run the setup script so the runtime user exists with the custom permission set assigned.

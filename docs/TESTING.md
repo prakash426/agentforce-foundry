@@ -7,7 +7,7 @@
 
 ## Commands and what each proves
 1. python3 tests/harness/test_validate_kits.py proves the harness itself works: validator shape, positive repo checks, and negative fixture checks including nonzero exits.
-2. python3 tests/harness/validate_kits.py proves repo consistency: kit READMEs, a valid Service scenario catalog, legacy suite presence, Apex markers, permission set references that resolve, and the agent bundle with its action binding plus transitions. Prints JSON. Exits nonzero on failure.
+2. python3 tests/harness/validate_kits.py proves repo consistency: kit READMEs, a valid Service scenario catalog, legacy suite presence, Apex markers, permission set references that resolve, the agent bundle with its action binding plus transitions plus access block runtime user plus no nested conditionals, and project plus manifest API versions covering agent metadata deployment. Prints JSON. Exits nonzero on failure.
 3. python3 tests/eval/audit_service_scenarios.py proves catalog completeness against static thresholds, multi-turn flow coverage, action requirements, and fixtures. Writes tests/eval/results/service-triage-audit.json. Always reports live execution as pending. This is a static audit, not an agent run.
 4. python3 tests/eval/test_agent_eval_tools.py proves the converter, result parser, and threshold enforcement work, including empty, partial, duplicate, unfinished, contradictory, and malformed fixtures, plus independent action requirements and execution evidence checks. No org needed.
 5. python3 tests/eval/convert_service_scenarios.py converts committed scenarios into a testing-center test spec plus mapping manifest using only platform supported fields. Required actions come from the independent catalog flag. Exits nonzero on invalid catalogs.
@@ -20,6 +20,7 @@
 12. sf agent validate plus publish plus activate prove the bundle compiles, a candidate version exists, and a version is live. Publish identifies the candidate for the exact agent from the retrieval diff. Pending first org.
 13. sf agent test create plus sf agent test run from the resolved spec prove agent routing, required action execution, and responses in an org. Pending first org.
 14. bash scripts/preview-service-triage-turns.sh proves sequential multi-turn behavior with kept transcripts. Pending first org. Use trace list and trace read actions detail for action proof when the runner cannot observe a logic run.
+15. bash scripts/validate-service-triage.sh proves the authoring bundle compiles server side without publishing, activating, or running anything. Substitutes the runtime username for validation only, then restores the placeholder from a backup on every exit path. Needs an org; without one there is nothing to validate. A pass never proves runtime behavior.
 
 ## Static thresholds
 1. Every scenario category holds 2 or more scenarios.

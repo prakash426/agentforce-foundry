@@ -215,9 +215,38 @@ testing. Fixes are offline verified only; live retest is pending.
   official Local Info Agent sample.
 - Offline result: pass (validator plus 8 new harness tests green;
   full offline suite green).
-- Live retest status: pending. Server side validation of the
-  corrected bundle has not run yet; the user reruns the
-  validation only checkpoint after independent review.
+- Live retest status: validation passed during the user checkpoint
+  below (compilation only). Publishing, activation, Apex runs, and
+  conversation testing of the corrected bundle remain pending.
+
+## Validation checkpoint: user observed authoring validation pass
+
+- Context: the user ran a validation only checkpoint in their
+  development org with the existing runtime user, on a locally
+  modified working tree based on the reviewed revision 745b377,
+  not on the unchanged PR commit.
+- Observed sequence, attributed to user provided terminal output:
+  a local editing mistake first joined `system:` and `instructions:`
+  onto one line and produced an unexpected syntax compiler error;
+  the opening lines were repaired; `default_agent_user` was moved
+  locally from `config` into `access`; the existing runtime
+  username was temporarily substituted; then `sf agent validate
+  authoring-bundle -n Service_Triage_Agent` against the chosen org
+  returned Status COMPLETED with Errors 0 in about 1.25 seconds;
+  the placeholder was restored afterward.
+- Result: the compound condition fix from Bug 8 compiled clean as
+  part of this checkpoint. Success is not attributed to the access
+  migration alone, since the opening syntax was repaired as well.
+  The joined opening line was a transient local editing error, not
+  a committed source defect; committed source always kept the lines
+  separate. No publishing, activation, Apex run, or conversation
+  testing happened during this checkpoint, and a validation pass
+  never establishes runtime behavior.
+- Evidence handling: no real runtime username, org credential, or
+  invented artifact path is recorded. The agent performing this
+  branch work never contacted the org; only the user ran validation.
+- Follow up: the access migration plus API pin in this branch still
+  await their own server side validation rerun after review.
 
 ## Preserved regressions
 

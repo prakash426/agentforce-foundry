@@ -76,7 +76,8 @@ Details live in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 - Bash for org scripts (they require `pipefail` plus JSON verification).
 - Salesforce CLI 2.157.8 or newer with the agent plugin. CI pins `@salesforce/cli@2.157.8`, which bundles the validate, publish, activate, and preview session commands. CLI 2.145.6 is proven to lack them; the setup script stops with update guidance on such CLIs. Agent user creation alone works on 2.145.6 and newer.
 - Git plus a GitHub account for the workflows.
-- For org paths: an Agentforce enabled org. Scratch orgs use Developer edition with the Einstein AI platform feature plus agent platform settings from [config/project-scratch-def.json](config/project-scratch-def.json). Source API version 60.0.
+- For org paths: an Agentforce enabled org. Scratch orgs use Developer edition with the Einstein AI platform feature plus agent platform settings from [config/project-scratch-def.json](config/project-scratch-def.json). Source API version 68.0, pinned with the validation manifest. Version 60.0 is a confirmed mismatch for authoring bundle deployment (minimum 65.0); the tested org exposes v68.
+- During staged testing, disable VS Code deploy on save (`salesforcedx-vscode-core.push-or-deploy-on-save.enabled` set to false) so saving a local edit never silently deploys. See the validation only checkpoint in [docs/MANUAL_ORG_TEST.md](docs/MANUAL_ORG_TEST.md).
 
 ## Offline quickstart (no org)
 
@@ -128,7 +129,7 @@ Each stage is distinct. The scripts and CI enforce the order and verify every st
 1. Deploy dependencies: Apex classes plus permission sets install first, so live actions exist before the agent runs.
 2. Validation only deploy (CI): a dry run of the Service manifest with its own test and coverage results. Validation saves nothing and proves nothing about installed code.
 3. Runtime user: create an agent user with the supported CLI command, or verify a supplied existing user, then assign the custom Service permission set to that user. Validation and publishing never run without a valid user.
-4. Authoring bundle validation: `sf agent validate` compiles the Agent Script. A pass means it compiles, not that it is published.
+4. Authoring bundle validation: `sf agent validate` compiles the Agent Script. A pass means it compiles, not that it is published and not that it behaves correctly at runtime. Run the validation only helper first after any bundle edit; see the manual checkpoint.
 5. Publish: `sf agent publish` creates an inactive candidate version plus its agent metadata, retrieved back to the project in either the legacy bots layout or the current aiAgentDefinitionVersions layout. Deployment alone never creates a version. Publish JSON carries no version number; the candidate is identified from the retrieval diff for the exact agent identity, filtered before comparing versions. Similar agent names never match.
 6. Activate: `sf agent activate` makes one version live. Publishing leaves versions inactive by design. Activation in your own org stays an explicit manual choice; CI activates only inside its disposable scratch org.
 7. Apex tests: run against installed candidate code with coverage kept. Twenty seven tests are committed; the two new uncertainty tests await org execution.
@@ -143,7 +144,7 @@ The runtime user needs org platform entitlements plus the custom Apex permission
 - Licenses: the org must offer the agent user profile with available user licenses. Creation checks this and fails with guidance when licenses are absent or exhausted. Provisioning comes from Agentforce enablement; contact the account team for more.
 - Platform permission sets, assigned by the creation command: `AgentforceServiceAgentBase`, `AgentforceServiceAgentUser`, `EinsteinGPTPromptTemplateUser`.
 - Custom permission set: `Agentforce_Foundry_Service`, assigned by the setup scripts to the admin user and to the runtime user, granting Apex class access.
-- The committed agent file holds an `UPDATE_WITH_DEFAULT_AGENT_USER` placeholder. Scripts resolve it to the established runtime user for validation and publishing only, then restore the placeholder automatically. Never commit a real username.
+- The committed agent file holds an `UPDATE_WITH_DEFAULT_AGENT_USER` placeholder under the top-level `access` block (`access.default_agent_user`; the old `config` placement is deprecated and rejected by project checks). Scripts resolve it to the established runtime user for validation and publishing only, then restore the placeholder automatically from a file backup that preserves unrelated local edits. Never commit a real username.
 - Creation is automatic in scratch orgs (`scripts/setup-agent-user.sh` runs inside setup). In an existing org, either let the script create a user or export `AGENT_USER` with a username to verify; verification requires an active user with the required profile and platform permission sets.
 
 ## Example conversations (unexecuted)
@@ -190,7 +191,7 @@ CI runs every offline layer on each push and pull request, plus honest org gated
 ## Known limitations
 
 - Version 1 reached an org (deploy, user setup, validation, publish, 25 Apex tests, activation) but its conversations failed acceptance testing. The fixes here are offline verified only; no fix is org verified before retesting.
-- The rewritten agent bundle uses deterministic logic plus prompt instructions following documented Agent Script semantics. One server compile failure (unsupported nested `if`, fixed with a compound condition) was already observed during setup validation; the corrected bundle still awaits server side re-validation plus execution in the user org.
+- The rewritten agent bundle uses deterministic logic plus prompt instructions following documented Agent Script semantics. The nested `if` fix compiled clean (0 errors) during a user run validation checkpoint on a locally modified tree; the committed access block migration plus API pin still await server side validation plus execution in the user org. A validation pass never establishes runtime behavior.
 - Twenty seven Apex tests are committed; the two new uncertainty tests still await execution in the user org.
 - Queue labels are suggestions, never validated against any org.
 - Negation and uncertainty word lists are heuristics; measured runs may require tuning.

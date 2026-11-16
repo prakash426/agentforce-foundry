@@ -8,6 +8,8 @@ config:
     developer_name: "Service_Triage_Agent"
     agent_label: "Service Triage Agent"
     description: "Suggests a priority and queue for support requests using the ServiceTriageAction Apex action. Recommendation only. Human follow up is a recommendation, not a transfer."
+
+access:
     default_agent_user: "UPDATE_WITH_DEFAULT_AGENT_USER"
 
 variables:

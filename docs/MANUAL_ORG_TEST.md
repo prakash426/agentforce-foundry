@@ -110,27 +110,37 @@ file, and `ci-results`.
 
 After any agent bundle edit, prove the bundle compiles before running
 the full setup again. This checkpoint validates only; it publishes
-nothing, activates nothing, and runs no tests.
+nothing, activates nothing, and runs no tests. A validation pass
+never establishes runtime behavior.
+
+First, stop the editor from deploying behind your back. In VS Code
+settings set `salesforcedx-vscode-core.push-or-deploy-on-save.enabled`
+to false for the workspace, so saving a local edit never silently
+deploys during this procedure.
+
+Then run the focused helper, explicitly naming the target org alias
+so validation never lands in the wrong org:
 
 ```sh
-ORG_ALIAS=my-dev-org
-RUNTIME_USER=<existing-runtime-username>
-AGENT_FILE=force-app/main/default/aiAuthoringBundles/Service_Triage_Agent/Service_Triage_Agent.agent
-cp "$AGENT_FILE" /tmp/agent-validate-backup.agent
-sed "s/UPDATE_WITH_DEFAULT_AGENT_USER/$RUNTIME_USER/" /tmp/agent-validate-backup.agent > "$AGENT_FILE"
-sf agent validate authoring-bundle -n Service_Triage_Agent -o "$ORG_ALIAS" --json | tee validate-check.json
-python3 scripts/verify_sf_output.py agent-validate validate-check.json
-cp /tmp/agent-validate-backup.agent "$AGENT_FILE"
-grep -n UPDATE_WITH_DEFAULT_AGENT_USER "$AGENT_FILE"
+ORG_ALIAS=my-dev-org RUNTIME_USER=<existing-runtime-username> bash scripts/validate-service-triage.sh
 ```
 
-Checkpoints: the validate command exits zero, the verifier prints
-`agent-validate success`, and the final grep matches the placeholder
-again, proving restoration. If validation fails, read the compiler
-error location in `validate-check.json`, fix the bundle, rerun the
-offline suite, and repeat this checkpoint. Only then retry full
-setup. Never commit a real username; `git status` must show no
-modification to the agent file afterward.
+With no `RUNTIME_USER`, the helper reads the username recorded by a
+prior setup run from `agent-user-<alias>.json` instead. The helper
+backs up the agent file to a temp copy (preserving unrelated local
+edits), substitutes the username for validation only, verifies the
+compile result from its JSON output, restores the backup on every
+exit path, and confirms the placeholder is back. If the placeholder
+is already absent, it stops before contacting the org.
+
+Checkpoints: the helper exits zero, the verifier prints
+`agent-validate success`, and the agent file shows the placeholder
+again afterward. If validation fails, read the compiler error
+location in `validate-Service_Triage_Agent.json`, fix the bundle,
+rerun the offline suite, and repeat this checkpoint. Only then retry
+full setup. Publishing and activation stay separate, intentional
+steps afterward. Never commit a real username; `git status` must
+show no modification to the agent file afterward.
 
 ## Rerun and resume notes
 
